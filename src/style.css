@@ -1,0 +1,150 @@
+:root {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: white;
+  background: #83c8ed;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+html, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+canvas { display: block; }
+
+.damage-vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(ellipse at center, transparent 28%, rgb(135 0 16 / 16%) 58%, rgb(110 0 12 / 82%) 100%),
+    linear-gradient(rgb(255 40 58 / 10%), rgb(255 40 58 / 10%));
+  box-shadow: inset 0 0 80px 24px rgb(255 0 30 / 36%);
+}
+
+.damage-vignette--active { animation: damage-flash 480ms ease-out both; }
+
+@keyframes damage-flash {
+  0% { opacity: 0.95; }
+  18% { opacity: 0.72; }
+  100% { opacity: 0; }
+}
+
+.menu {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-content: center;
+  gap: 28px;
+  color: white;
+  background: #000;
+  text-align: center;
+}
+
+.menu[hidden] { display: none; }
+
+.menu__title {
+  margin: 0;
+  font-size: clamp(34px, 7vw, 72px);
+  font-weight: 500;
+  letter-spacing: 0.2em;
+}
+
+.menu__actions {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+}
+
+.menu__back {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  min-width: 0 !important;
+  text-align: left;
+}
+
+.dev-settings {
+  width: min(420px, calc(100vw - 48px));
+  text-align: left;
+}
+
+.controls {
+  width: min(360px, calc(100vw - 48px));
+  text-align: left;
+}
+
+.controls h1 { text-align: center; }
+.controls dl { margin: 0; }
+.controls dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 13px 4px;
+  border-bottom: 1px solid rgb(255 255 255 / 20%);
+}
+.controls dd { margin: 0; color: #83c8ed; }
+
+.dev-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 13px 4px;
+  border-bottom: 1px solid rgb(255 255 255 / 20%);
+  cursor: pointer;
+}
+
+.dev-setting input {
+  width: 20px;
+  height: 20px;
+  accent-color: #83c8ed;
+}
+
+.menu button {
+  min-width: 190px;
+  padding: 10px 20px;
+  color: white;
+  background: transparent;
+  border: 0;
+  font: inherit;
+  font-size: 18px;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+}
+
+.menu button:hover,
+.menu button:focus-visible {
+  color: #83c8ed;
+  outline: none;
+}
+
+.hud {
+  position: fixed;
+  inset: 20px;
+  pointer-events: none;
+  text-shadow: 0 2px 3px #001b2d;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+}
+
+.hud[hidden] { display: none; }
+
+.hud__score { position: absolute; top: 0; right: 0; }
+.hud__health { position: absolute; top: 28px; left: 0; width: min(260px, 42vw); }
+.hud__health-label { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; }
+.hud__health-track {
+  height: 12px;
+  padding: 2px;
+  border: 1px solid rgb(255 255 255 / 70%);
+  background: rgb(0 27 45 / 45%);
+}
+.hud__health-fill {
+  width: 100%;
+  height: 100%;
+  background: #70e2ff;
+  box-shadow: 0 0 8px rgb(112 226 255 / 70%);
+  transition: width 120ms ease-out, background-color 120ms ease-out;
+}
+.hud__health-fill--critical { background: #ff536f; box-shadow: 0 0 8px rgb(255 83 111 / 75%); }
+.hud__fps { position: absolute; top: 28px; right: 0; }
