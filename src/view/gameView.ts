@@ -5,6 +5,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { FLIGHT_WINDOW, type FlightSimulation } from '../sim/flightSimulation';
 import { railFrameAtDistance, railOffsetPosition } from '../sim/railSystem';
+import { WaterView } from './waterView';
 
 const TURN_BANK = THREE.MathUtils.degToRad(20);
 const INPUT_BANK = THREE.MathUtils.degToRad(6);
@@ -30,7 +31,7 @@ export class GameView {
   private readonly shotGlowGeometry = createBoltGeometry(0.22, 3.35, 12);
   private readonly islandGeometry = new THREE.BoxGeometry(1, 1, 1);
   private readonly islandMaterial = new THREE.MeshStandardMaterial({ color: 0x8b714d, roughness: 1 });
-  private readonly water: THREE.Mesh;
+  private readonly water: WaterView;
   private readonly flightWindowGuide: THREE.Line;
   private readonly splineGuide: THREE.Line;
 
@@ -53,12 +54,8 @@ export class GameView {
     sun.position.set(-20, 35, -10);
     this.scene.add(sun);
 
-    this.water = new THREE.Mesh(
-      new THREE.PlaneGeometry(900, 900),
-      new THREE.MeshStandardMaterial({ color: 0x147fc2, roughness: 0.42, metalness: 0.08 }),
-    );
-    this.water.rotation.x = -Math.PI / 2;
-    this.scene.add(this.water);
+    this.water = new WaterView();
+    this.scene.add(this.water.mesh);
 
     const shape = new THREE.Shape();
     shape.moveTo(0, 1.35);
@@ -101,7 +98,7 @@ export class GameView {
       railCenter.z - rail.forward.z * cameraDistance,
     );
     this.camera.lookAt(railCenter.x, railCenter.y, railCenter.z);
-    this.water.position.set(rail.position.x, -0.02, rail.position.z);
+    this.water.update(rail.position.x, rail.position.z, performance.now() * 0.001);
     this.flightWindowGuide.position.set(rail.position.x, 0, rail.position.z);
     this.flightWindowGuide.rotation.y = Math.PI - rail.heading;
     if (this.splineGuide.visible) updateSplineGuide(this.splineGuide, sim.railDistance);
