@@ -3,7 +3,7 @@ import { railFrameAtDistance, railOffsetPosition, RAIL_SPEED, SECTION_LENGTH, SE
 import { controlEnemy } from './enemyControllers';
 
 const PLAYER_SPEED = 12;
-const SHOT_SPEED = 60;
+const SHOT_SPEED = 68;
 const FIRE_INTERVAL = 0.18;
 const SLOW_RAIL_SPEED = 6;
 const FAST_RAIL_SPEED = 25;
@@ -31,7 +31,7 @@ export class FlightSimulation {
   private nextId = 1;
   private fireCooldown = 0;
   private elapsed = 0;
-  private nextIslandDistance = 200;
+  private nextIslandDistance = 34;
   private nextEnemySection = 0;
 
   constructor() {
@@ -55,7 +55,7 @@ export class FlightSimulation {
     if (command.fire && this.fireCooldown === 0) {
       const rail = railFrameAtDistance(this.railDistance);
       const position = railOffsetPosition(this.railDistance + 2, this.player.offsetX, this.player.offsetY);
-      this.projectiles.push({ id: this.nextId++, position, velocity: { x: rail.forward.x * SHOT_SPEED, y: 0, z: rail.forward.z * SHOT_SPEED }, radius: 0.35, owner: 'player' });
+      this.projectiles.push({ id: this.nextId++, position, velocity: { x: rail.forward.x * SHOT_SPEED, y: 0, z: rail.forward.z * SHOT_SPEED }, radius: 0.3, owner: 'player' });
       this.fireCooldown = FIRE_INTERVAL;
       result.shotsFired = 1;
     }
@@ -96,7 +96,7 @@ export class FlightSimulation {
       const seed = hash(this.nextIslandDistance / ISLAND_SPACING);
       const side = seed % 2 === 0 ? -1 : 1;
       const offset = side * (23 + (seed % 17));
-      const size = { x: 9 + seed % 10, y: 2.5 + (seed % 5), z: 11 + (seed >>> 4) % 15 };
+      const size = { x: 8 + seed % 12, y: 5 + (seed % 12), z: 10 + (seed >>> 4) % 17 };
       const position = railOffsetPosition(this.nextIslandDistance, offset, size.y / 2 - 0.35);
       this.islands.push({ id: this.nextId++, position, size, rotation: (seed % 31) * 0.07, railDistance: this.nextIslandDistance });
       this.nextIslandDistance += ISLAND_SPACING;
@@ -168,7 +168,7 @@ export class FlightSimulation {
     };
     const dx = target.x - enemy.position.x, dy = target.y - enemy.position.y, dz = target.z - enemy.position.z;
     const length = Math.hypot(dx, dy, dz) || 1;
-    this.projectiles.push({ id: this.nextId++, position: { ...enemy.position }, velocity: { x: dx / length * ENEMY_SHOT_SPEED, y: dy / length * ENEMY_SHOT_SPEED, z: dz / length * ENEMY_SHOT_SPEED }, radius: 0.3, owner: 'enemy' });
+    this.projectiles.push({ id: this.nextId++, position: { ...enemy.position }, velocity: { x: dx / length * ENEMY_SHOT_SPEED, y: dy / length * ENEMY_SHOT_SPEED, z: dz / length * ENEMY_SHOT_SPEED }, radius: 0.26, owner: 'enemy' });
   }
 }
 

@@ -1,10 +1,12 @@
 import './style.css';
 import { InputState } from './input/inputState';
+import { LEVELS, type LevelId } from './levels';
 import { FlightSimulation } from './sim/flightSimulation';
 import { GameView } from './view/gameView';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing app root');
+const appRoot = app;
 
 app.innerHTML = `
   <div class="menu" id="main-menu">
@@ -18,9 +20,28 @@ app.innerHTML = `
     <h1 class="menu__title">PAUSED</h1>
     <div class="menu__actions">
       <button id="continue-button" type="button">CONTINUE</button>
+      <button id="settings-button" type="button">SETTINGS</button>
       <button id="controls-button" type="button">CONTROLS</button>
       <button id="main-menu-button" type="button">MAIN MENU</button>
       ${import.meta.env.DEV ? '<button id="dev-settings-button" type="button">DEV SETTINGS</button>' : ''}
+    </div>
+  </div>
+  <div class="menu" id="settings-menu" hidden>
+    <button class="menu__back" id="settings-back" type="button">BACK</button>
+    <div class="settings">
+      <h1>SETTINGS</h1>
+      <div class="setting-row">
+        <div><span>GRAPHICS</span><small id="render-resolution"></small></div>
+        <select id="render-scale" aria-label="Graphics quality">
+          <option value="0.5">LOW</option>
+          <option value="0.75">MEDIUM</option>
+          <option value="1">HIGH</option>
+        </select>
+      </div>
+      <label class="setting-row setting-toggle">
+        <span>ANTI-ALIASING</span>
+        <input id="anti-aliasing" type="checkbox">
+      </label>
     </div>
   </div>
   <div class="menu" id="controls-menu" hidden>
@@ -48,11 +69,19 @@ app.innerHTML = `
       </div>
     </div>` : ''}
   <div class="damage-vignette" id="damage-vignette" aria-hidden="true"></div>
-  <div class="hud" id="hud" hidden><div>EXOWING</div><div class="hud__health"><div class="hud__health-label">HULL INTEGRITY <span id="health">100%</span></div><div class="hud__health-track" role="meter" aria-label="Hull integrity" aria-valuemin="0" aria-valuemax="5" aria-valuenow="5"><div class="hud__health-fill" id="health-fill"></div></div></div><div class="hud__score">SCORE <span id="score">0000</span></div><div class="hud__fps" id="fps" hidden>FPS 0</div></div>`;
+  <div class="hud" id="hud" hidden>
+    <div class="hud__health">
+      <div class="hud__eyebrow"><span>HULL INTEGRITY</span><span id="health">100%</span></div>
+      <div class="hud__health-track" role="meter" aria-label="Hull integrity" aria-valuemin="0" aria-valuemax="5" aria-valuenow="5"><div class="hud__health-fill" id="health-fill"></div></div>
+    </div>
+    <div class="hud__score"><span class="hud__score-label">SCORE</span><span class="hud__score-value" id="score">0000</span></div>
+    <div class="hud__fps" id="fps" hidden>FPS 0</div>
+  </div>`;
 
 let simulation = new FlightSimulation();
 const input = new InputState();
-const view = new GameView(app);
+let currentLevelId: LevelId = 1;
+let view = new GameView(appRoot, LEVELS[currentLevelId]);
 const score = document.querySelector<HTMLSpanElement>('#score');
 const health = requiredElement<HTMLSpanElement>('#health');
 const healthFill = requiredElement<HTMLDivElement>('#health-fill');
@@ -63,9 +92,15 @@ const hud = requiredElement<HTMLDivElement>('#hud');
 const mainMenu = requiredElement<HTMLDivElement>('#main-menu');
 const pauseMenu = requiredElement<HTMLDivElement>('#pause-menu');
 const controlsMenu = requiredElement<HTMLDivElement>('#controls-menu');
+const settingsMenu = requiredElement<HTMLDivElement>('#settings-menu');
 const startButton = requiredElement<HTMLButtonElement>('#start-button');
 const continueButton = requiredElement<HTMLButtonElement>('#continue-button');
 const controlsButton = requiredElement<HTMLButtonElement>('#controls-button');
+const settingsButton = requiredElement<HTMLButtonElement>('#settings-button');
+const settingsBackButton = requiredElement<HTMLButtonElement>('#settings-back');
+const renderScaleSelect = requiredElement<HTMLSelectElement>('#render-scale');
+const renderResolution = requiredElement<HTMLElement>('#render-resolution');
+const antiAliasingInput = requiredElement<HTMLInputElement>('#anti-aliasing');
 const controlsBackButton = requiredElement<HTMLButtonElement>('#controls-back');
 const mainMenuButton = requiredElement<HTMLButtonElement>('#main-menu-button');
 const fixedDt = 1 / 60;
@@ -93,13 +128,27 @@ function applyDevSettings() {
   });
 }
 
-function startGame() {
+function startGame(levelId: LevelId = currentLevelId) {
+  currentLevelId = levelId;
+  view.dispose();
   simulation = new FlightSimulation();
+  view = new GameView(appRoot, LEVELS[currentLevelId]);
+  view.setRenderScale(Number(renderScaleSelect.value));
+  view.setAntiAliasing(antiAliasingInput.checked);
+  applyDevSettings();
   mode = 'playing';
   mainMenu.hidden = true;
   pauseMenu.hidden = true;
+  controlsMenu.hidden = true;
+  settingsMenu.hidden = true;
+  const devSettingsMenu = document.querySelector<HTMLDivElement>('#dev-settings-menu');
+  if (devSettingsMenu) devSettingsMenu.hidden = true;
+  closeDevSettings = null;
   hud.hidden = false;
+  damageVignette.classList.remove('damage-vignette--active');
   accumulator = 0;
+  previous = performance.now();
+  updateRenderResolution();
 }
 
 function pauseGame() {
@@ -135,25 +184,72 @@ function closeControls() {
   controlsButton.focus();
 }
 
-startButton.addEventListener('click', startGame);
+function updateRenderResolution() {
+  const resolution = view.getRenderResolution();
+  renderResolution.textContent = `${resolution.width} × ${resolution.height}`;
+}
+
+function openSettings() {
+  pauseMenu.hidden = true;
+  settingsMenu.hidden = false;
+  settingsBackButton.focus();
+}
+
+function closeSettings() {
+  settingsMenu.hidden = true;
+  pauseMenu.hidden = false;
+  settingsButton.focus();
+}
+
+startButton.addEventListener('click', () => startGame(currentLevelId));
 continueButton.addEventListener('click', continueGame);
 controlsButton.addEventListener('click', openControls);
+settingsButton.addEventListener('click', openSettings);
+settingsBackButton.addEventListener('click', closeSettings);
 controlsBackButton.addEventListener('click', closeControls);
 mainMenuButton.addEventListener('click', returnToMainMenu);
 window.addEventListener('keydown', (event) => {
+  if (!event.repeat && (event.code === 'Digit1' || event.code === 'Digit2')) {
+    startGame(event.code === 'Digit1' ? 1 : 2);
+    return;
+  }
   if (event.code !== 'Escape' || event.repeat) return;
   if (!controlsMenu.hidden) {
     closeControls();
     return;
   }
-  const settingsMenu = document.querySelector<HTMLDivElement>('#dev-settings-menu');
-  if (settingsMenu && !settingsMenu.hidden && closeDevSettings) {
+  if (!settingsMenu.hidden) {
+    closeSettings();
+    return;
+  }
+  const devSettingsMenu = document.querySelector<HTMLDivElement>('#dev-settings-menu');
+  if (devSettingsMenu && !devSettingsMenu.hidden && closeDevSettings) {
     closeDevSettings();
     return;
   }
   if (mode === 'playing') pauseGame();
   else if (mode === 'paused') continueGame();
 });
+
+const storedRenderScale = Number(localStorage.getItem('exowing.renderScale'));
+const initialRenderScale = [0.5, 0.75, 1].includes(storedRenderScale) ? storedRenderScale : 1;
+const antiAliasingEnabled = localStorage.getItem('exowing.antiAliasing') !== 'false';
+renderScaleSelect.value = initialRenderScale.toString();
+antiAliasingInput.checked = antiAliasingEnabled;
+view.setRenderScale(initialRenderScale);
+view.setAntiAliasing(antiAliasingEnabled);
+updateRenderResolution();
+renderScaleSelect.addEventListener('change', () => {
+  const scale = Number(renderScaleSelect.value);
+  view.setRenderScale(scale);
+  updateRenderResolution();
+  try { localStorage.setItem('exowing.renderScale', scale.toString()); } catch { /* Persistence is optional. */ }
+});
+antiAliasingInput.addEventListener('change', () => {
+  view.setAntiAliasing(antiAliasingInput.checked);
+  try { localStorage.setItem('exowing.antiAliasing', antiAliasingInput.checked.toString()); } catch { /* Persistence is optional. */ }
+});
+window.addEventListener('resize', updateRenderResolution);
 
 // Test/development shortcut: http://localhost:5173/?play=1
 if (new URLSearchParams(location.search).get('play') === '1') startGame();

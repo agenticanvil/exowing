@@ -1,10 +1,13 @@
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { FXAAPass } from 'three/examples/jsm/postprocessing/FXAAPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import type { IslandStyle, LevelDefinition } from '../levels';
 import { FLIGHT_WINDOW, type FlightSimulation } from '../sim/flightSimulation';
 import { railFrameAtDistance, railOffsetPosition } from '../sim/railSystem';
+import { SkyView } from './skyView';
 import { WaterView } from './waterView';
 
 const TURN_BANK = THREE.MathUtils.degToRad(20);
@@ -21,40 +24,57 @@ export class GameView {
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(62, 1, 0.1, 500);
   private readonly composer: EffectComposer;
+  private readonly fxaaPass = new FXAAPass();
   private readonly ship: THREE.Mesh;
   private readonly enemyViews = new Map<number, THREE.Mesh>();
   private readonly projectileViews = new Map<number, THREE.Group>();
   private readonly islandViews = new Map<number, THREE.Mesh>();
   private readonly enemyGeometry = new THREE.SphereGeometry(1.25, 16, 10);
   private readonly enemyMaterial = new THREE.MeshStandardMaterial({ color: 0xf04453, roughness: 0.65 });
-  private readonly shotCoreGeometry = createBoltGeometry(0.1, 2.7, 12);
-  private readonly shotGlowGeometry = createBoltGeometry(0.22, 3.35, 12);
-  private readonly islandGeometry = new THREE.BoxGeometry(1, 1, 1);
-  private readonly islandMaterial = new THREE.MeshStandardMaterial({ color: 0x8b714d, roughness: 1 });
+  private readonly shotCoreGeometry = createBoltGeometry(0.085, 2.35, 12);
+  private readonly shotGlowGeometry = createBoltGeometry(0.19, 2.9, 12);
+  private readonly islandMaterial: THREE.MeshStandardMaterial;
   private readonly water: WaterView;
+  private readonly sky: SkyView;
+  private readonly sunLight: THREE.DirectionalLight;
   private readonly flightWindowGuide: THREE.Line;
   private readonly splineGuide: THREE.Line;
+  private readonly sunDirection: THREE.Vector3;
+  private readonly islandStyle: IslandStyle;
+  private renderScale = 1;
 
-  constructor(container: HTMLElement) {
+  constructor(container: HTMLElement, level: LevelDefinition) {
+    const environment = level.environment;
+    this.sunDirection = new THREE.Vector3(...environment.sunDirection).normalize();
+    this.islandStyle = level.islands.style;
+    this.islandMaterial = new THREE.MeshStandardMaterial({ color: level.islands.color, roughness: 1 });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.setSize(innerWidth, innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1;
+    this.renderer.toneMappingExposure = environment.exposure;
     container.append(this.renderer.domElement);
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.68, 0.22, 2));
+    this.composer.addPass(this.fxaaPass);
     this.composer.addPass(new OutputPass());
-    this.scene.background = new THREE.Color(0x83c8ed);
-    this.scene.fog = new THREE.Fog(0x83c8ed, 80, 190);
+    const horizonColor = new THREE.Color(environment.horizon);
+    this.scene.background = horizonColor;
+    this.scene.fog = new THREE.Fog(horizonColor, 80, 190);
 
-    this.scene.add(new THREE.HemisphereLight(0xd9f1ff, 0x304b39, 2.5));
-    const sun = new THREE.DirectionalLight(0xffffff, 2.2);
-    sun.position.set(-20, 35, -10);
-    this.scene.add(sun);
+    this.scene.add(new THREE.HemisphereLight(
+      environment.hemisphereSky,
+      environment.hemisphereGround,
+      environment.hemisphereIntensity,
+    ));
+    this.sunLight = new THREE.DirectionalLight(environment.sunColor, environment.sunIntensity);
+    this.scene.add(this.sunLight, this.sunLight.target);
 
-    this.water = new WaterView();
+    this.sky = new SkyView(level);
+    this.scene.add(this.sky.mesh);
+
+    this.water = new WaterView(level);
     this.scene.add(this.water.mesh);
 
     const shape = new THREE.Shape();
@@ -88,7 +108,7 @@ export class GameView {
     this.ship.rotation.x = sim.player.velocityY * 0.012;
     syncMeshes(this.scene, this.enemyViews, sim.enemies, this.enemyGeometry, this.enemyMaterial);
     syncProjectiles(this.scene, this.projectileViews, sim.projectiles, this.shotCoreGeometry, this.shotGlowGeometry);
-    syncIslands(this.scene, this.islandViews, sim.islands, this.islandGeometry, this.islandMaterial);
+    syncIslands(this.scene, this.islandViews, sim.islands, this.islandMaterial, this.islandStyle);
     const windowCenterY = (FLIGHT_WINDOW.minY + FLIGHT_WINDOW.maxY) / 2;
     const cameraDistance = distanceToFrameFlightWindow(this.camera);
     const railCenter = railOffsetPosition(sim.railDistance, 0, windowCenterY);
@@ -98,7 +118,10 @@ export class GameView {
       railCenter.z - rail.forward.z * cameraDistance,
     );
     this.camera.lookAt(railCenter.x, railCenter.y, railCenter.z);
-    this.water.update(rail.position.x, rail.position.z, performance.now() * 0.001);
+    this.sky.update(this.camera.position);
+    this.sunLight.target.position.set(railCenter.x, railCenter.y, railCenter.z);
+    this.sunLight.position.copy(this.sunLight.target.position).addScaledVector(this.sunDirection, 120);
+    this.water.update(rail.position.x, rail.position.z, performance.now() * 0.001, sim.islands);
     this.flightWindowGuide.position.set(rail.position.x, 0, rail.position.z);
     this.flightWindowGuide.rotation.y = Math.PI - rail.heading;
     if (this.splineGuide.visible) updateSplineGuide(this.splineGuide, sim.railDistance);
@@ -110,9 +133,48 @@ export class GameView {
     this.splineGuide.visible = showSpline;
   }
 
+  setRenderScale(scale: number) {
+    this.renderScale = scale;
+    this.resize();
+  }
+
+  setAntiAliasing(enabled: boolean) {
+    this.fxaaPass.enabled = enabled;
+  }
+
+  getRenderResolution() {
+    return {
+      width: Math.round(innerWidth * Math.min(devicePixelRatio, 2) * this.renderScale),
+      height: Math.round(innerHeight * Math.min(devicePixelRatio, 2) * this.renderScale),
+    };
+  }
+
+  dispose() {
+    window.removeEventListener('resize', this.resize);
+    const geometries = new Set<THREE.BufferGeometry>();
+    const materials = new Set<THREE.Material>();
+    this.scene.traverse((object) => {
+      if (!(object instanceof THREE.Mesh || object instanceof THREE.Line)) return;
+      geometries.add(object.geometry);
+      const objectMaterials = Array.isArray(object.material) ? object.material : [object.material];
+      for (const material of objectMaterials) materials.add(material);
+    });
+    for (const geometry of geometries) geometry.dispose();
+    for (const material of materials) material.dispose();
+    this.composer.dispose();
+    this.renderer.renderLists.dispose();
+    this.renderer.dispose();
+    this.renderer.forceContextLoss();
+    this.renderer.domElement.remove();
+    this.islandViews.clear();
+    this.enemyViews.clear();
+    this.projectileViews.clear();
+  }
+
   private resize = () => {
     this.camera.aspect = innerWidth / innerHeight;
     this.camera.updateProjectionMatrix();
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2) * this.renderScale);
     this.renderer.setSize(innerWidth, innerHeight);
     this.composer.setSize(innerWidth, innerHeight);
   };
@@ -261,16 +323,130 @@ function syncIslands(
   scene: THREE.Scene,
   views: Map<number, THREE.Mesh>,
   states: FlightSimulation['islands'],
-  geometry: THREE.BufferGeometry,
   material: THREE.Material,
+  style: IslandStyle,
 ) {
   const live = new Set(states.map((state) => state.id));
-  for (const [id, mesh] of views) if (!live.has(id)) { scene.remove(mesh); views.delete(id); }
+  for (const [id, mesh] of views) if (!live.has(id)) {
+    scene.remove(mesh);
+    mesh.geometry.dispose();
+    views.delete(id);
+  }
   for (const state of states) {
     let mesh = views.get(state.id);
-    if (!mesh) { mesh = new THREE.Mesh(geometry, material); views.set(state.id, mesh); scene.add(mesh); }
+    if (!mesh) {
+      mesh = new THREE.Mesh(createIslandGeometry(state.id, style), material);
+      views.set(state.id, mesh);
+      scene.add(mesh);
+    }
     mesh.position.set(state.position.x, state.position.y, state.position.z);
     mesh.scale.set(state.size.x, state.size.y, state.size.z);
     mesh.rotation.y = state.rotation;
   }
+}
+
+function createIslandGeometry(seed: number, style: IslandStyle) {
+  const random = mulberry32(seed * 0x9e3779b1);
+  const positions: number[] = [];
+
+  if (style === 'spires') {
+    // A broad shared shelf anchors several chunky, near-vertical rock obelisks.
+    appendRock(positions, random, {
+      centerX: 0, centerZ: 0, scaleX: 1, scaleZ: 1, sides: 8,
+      rings: [[-0.65, 1.16], [-0.5, 1.08], [-0.16, 0.94], [0.12, 0.78], [0.3, 0.64]],
+      topY: 0.38, jitter: 0.16, lean: 0.08,
+    });
+    const obeliskCount = 2 + Math.floor(random() * 3);
+    for (let index = 0; index < obeliskCount; index++) {
+      const dominant = index === 0;
+      const angle = random() * Math.PI * 2;
+      const distance = dominant ? random() * 0.14 : 0.25 + random() * 0.34;
+      const width = dominant ? 0.58 + random() * 0.16 : 0.32 + random() * 0.18;
+      const depth = dominant ? 0.5 + random() * 0.18 : 0.28 + random() * 0.18;
+      const topY = dominant ? 0.9 + random() * 0.2 : 0.58 + random() * 0.3;
+      appendRock(positions, random, {
+        centerX: Math.cos(angle) * distance,
+        centerZ: Math.sin(angle) * distance,
+        scaleX: width,
+        scaleZ: depth,
+        sides: 6 + Math.floor(random() * 3),
+        rings: [[0.02, 0.82], [0.3, 0.72], [topY - 0.22, 0.61], [topY - 0.1, 0.34]],
+        topY,
+        jitter: 0.18,
+        lean: 0.12,
+      });
+    }
+  } else {
+    const profile = Math.floor(random() * 3);
+    const topRadius = profile === 0 ? 0.2 : profile === 1 ? 0.43 : 0.65;
+    appendRock(positions, random, {
+      centerX: 0, centerZ: 0, scaleX: 1, scaleZ: 1, sides: 7 + Math.floor(random() * 5),
+      rings: [[-0.65, 1.16], [-0.5, 1.08], [-0.15, profile === 2 ? 0.98 : 0.9],
+        [0.18, profile === 2 ? 0.82 : 0.68], [0.5, topRadius]],
+      topY: 0.5 + (profile === 0 ? 0.18 : 0), jitter: 0.19, lean: 0.22,
+    });
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+type RockSpec = {
+  centerX: number;
+  centerZ: number;
+  scaleX: number;
+  scaleZ: number;
+  sides: number;
+  rings: Array<[y: number, radius: number]>;
+  topY: number;
+  jitter: number;
+  lean: number;
+};
+
+function appendRock(positions: number[], random: () => number, spec: RockSpec) {
+  const angleJitter = Array.from({ length: spec.sides }, () => (random() - 0.5) * spec.jitter);
+  const radiusJitter = Array.from({ length: spec.sides }, () => 0.82 + random() * 0.34);
+  const leanX = (random() - 0.5) * spec.lean;
+  const leanZ = (random() - 0.5) * spec.lean;
+  const vertices = spec.rings.map(([y, radius], ringIndex) => Array.from({ length: spec.sides }, (_, index) => {
+    const angle = index / spec.sides * Math.PI * 2 + angleJitter[index];
+    const progress = ringIndex / Math.max(spec.rings.length - 1, 1);
+    const localNoise = 0.98 + random() * 0.04;
+    return new THREE.Vector3(
+      spec.centerX + Math.cos(angle) * radius * radiusJitter[index] * localNoise * spec.scaleX + leanX * progress,
+      y + (ringIndex === 0 || ringIndex === spec.rings.length - 1 ? 0 : (random() - 0.5) * 0.05),
+      spec.centerZ + Math.sin(angle) * radius * radiusJitter[index] * localNoise * spec.scaleZ + leanZ * progress,
+    );
+  }));
+  const addTriangle = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3) => {
+    positions.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+  };
+  for (let ring = 0; ring < vertices.length - 1; ring++) {
+    for (let index = 0; index < spec.sides; index++) {
+      const next = (index + 1) % spec.sides;
+      if ((index + ring) % 2 === 0) {
+        addTriangle(vertices[ring][index], vertices[ring + 1][index], vertices[ring][next]);
+        addTriangle(vertices[ring][next], vertices[ring + 1][index], vertices[ring + 1][next]);
+      } else {
+        addTriangle(vertices[ring][index], vertices[ring + 1][next], vertices[ring][next]);
+        addTriangle(vertices[ring][index], vertices[ring + 1][index], vertices[ring + 1][next]);
+      }
+    }
+  }
+  const topCenter = new THREE.Vector3(spec.centerX + leanX, spec.topY, spec.centerZ + leanZ);
+  for (let index = 0; index < spec.sides; index++) {
+    addTriangle(vertices.at(-1)![index], topCenter, vertices.at(-1)![(index + 1) % spec.sides]);
+  }
+}
+
+function mulberry32(seed: number) {
+  return () => {
+    seed |= 0;
+    seed = seed + 0x6d2b79f5 | 0;
+    let value = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    value = value + Math.imul(value ^ value >>> 7, 61 | value) ^ value;
+    return ((value ^ value >>> 14) >>> 0) / 4294967296;
+  };
 }
