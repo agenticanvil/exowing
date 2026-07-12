@@ -201,6 +201,22 @@ canvas { display: block; }
   accent-color: #83c8ed;
 }
 
+.dev-level-toggle {
+  width: 100%;
+  margin-top: 12px;
+  border-top: 1px solid rgb(255 255 255 / 20%) !important;
+}
+
+.dev-level-list {
+  display: grid;
+  gap: 4px;
+  padding: 6px 0 0 18px;
+  border-left: 1px solid #83c8ed;
+}
+
+.dev-level-list[hidden] { display: none; }
+.dev-level-list button { width: 100%; min-width: 0; text-align: left; font-size: 14px; }
+
 .menu button {
   min-width: 190px;
   padding: 10px 20px;

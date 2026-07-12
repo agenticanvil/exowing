@@ -1,6 +1,6 @@
 import './style.css';
 import { InputState } from './input/inputState';
-import { LEVELS, type LevelId } from './levels';
+import { LEVEL_IDS, LEVELS, type LevelId } from './levels';
 import { createWorld } from './world/worldSystem';
 import { FlightSimulation } from './sim/flightSimulation';
 import { GameView } from './view/gameView';
@@ -68,6 +68,10 @@ app.innerHTML = `
         <label class="dev-setting">SHOW FPS <input data-dev-setting="showFps" type="checkbox"></label>
         <label class="dev-setting">SHOW MOVEMENT FRAME <input data-dev-setting="showMovementFrame" type="checkbox"></label>
         <label class="dev-setting">SHOW SPLINE <input data-dev-setting="showSpline" type="checkbox"></label>
+        <button class="dev-level-toggle" id="dev-level-toggle" type="button" aria-expanded="false">SWITCH LEVEL</button>
+        <div class="dev-level-list" id="dev-level-list" hidden>
+          ${LEVEL_IDS.map((id) => `<button type="button" data-dev-level="${id}">${id} · ${LEVELS[id].name.toUpperCase()}</button>`).join('')}
+        </div>
       </div>
     </div>` : ''}
   <div class="damage-vignette" id="damage-vignette" aria-hidden="true"></div>
@@ -169,7 +173,7 @@ function applyDevSettings() {
 }
 
 function styleForLevel(levelNumber: number): LevelId {
-  return levelNumber % 2 === 1 ? 1 : 2;
+  return LEVEL_IDS[(levelNumber - 1) % LEVEL_IDS.length];
 }
 
 async function startGame(levelNumber = 1, carry?: { health: number; score: number }) {
@@ -281,10 +285,6 @@ settingsBackButton.addEventListener('click', closeSettings);
 controlsBackButton.addEventListener('click', closeControls);
 mainMenuButton.addEventListener('click', returnToMainMenu);
 window.addEventListener('keydown', (event) => {
-  if (!event.repeat && (event.code === 'Digit1' || event.code === 'Digit2')) {
-    void startGame(event.code === 'Digit1' ? 1 : 2);
-    return;
-  }
   if (event.code !== 'Escape' || event.repeat) return;
   if (!controlsMenu.hidden) {
     closeControls();
@@ -323,11 +323,12 @@ antiAliasingInput.addEventListener('change', () => {
 });
 window.addEventListener('resize', updateRenderResolution);
 
-// Test/development shortcut: http://localhost:5173/?play=1
-if (new URLSearchParams(location.search).get('play') === '1') void startGame();
-else startButton.focus();
-
 if (import.meta.env.DEV) setupDevControls();
+
+// Test/development shortcut: ?play=3&dev=invulnerable
+const requestedLevel = levelFromQuery(new URLSearchParams(location.search).get('play'));
+if (requestedLevel) void startGame(requestedLevel);
+else startButton.focus();
 
 function frame(now: number) {
   const frameDt = Math.min((now - previous) / 1000, 0.1);
@@ -456,6 +457,8 @@ function setupDevControls() {
   const startSettingsButton = requiredElement<HTMLButtonElement>('#start-dev-settings-button');
   const settingsMenu = requiredElement<HTMLDivElement>('#dev-settings-menu');
   const backButton = requiredElement<HTMLButtonElement>('#dev-settings-back');
+  const levelToggle = requiredElement<HTMLButtonElement>('#dev-level-toggle');
+  const levelList = requiredElement<HTMLDivElement>('#dev-level-list');
 
   function openSettings(sourceMenu: HTMLDivElement, sourceButton: HTMLButtonElement) {
     sourceMenu.hidden = true;
@@ -472,6 +475,18 @@ function setupDevControls() {
   pauseSettingsButton.addEventListener('click', () => openSettings(pauseMenu, pauseSettingsButton));
   startSettingsButton.addEventListener('click', () => openSettings(mainMenu, startSettingsButton));
   backButton.addEventListener('click', () => closeDevSettings?.());
+  levelToggle.addEventListener('click', () => {
+    levelList.hidden = !levelList.hidden;
+    levelToggle.setAttribute('aria-expanded', (!levelList.hidden).toString());
+  });
+  levelList.querySelectorAll<HTMLButtonElement>('[data-dev-level]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const levelId = Number(button.dataset.devLevel) as LevelId;
+      levelList.hidden = true;
+      levelToggle.setAttribute('aria-expanded', 'false');
+      void startGame(levelId);
+    });
+  });
   document.querySelectorAll<HTMLInputElement>('[data-dev-setting]').forEach((input) => {
     input.addEventListener('change', () => {
       devSettings[input.dataset.devSetting as DevSettingName] = input.checked;
@@ -491,10 +506,10 @@ function setupDevControls() {
       devSettings[name] = enabled;
       applyDevSettings();
     },
-    start(overrides = {}) {
+    start(levelId = 1, overrides = {}) {
       Object.assign(devSettings, overrides);
       applyDevSettings();
-      void startGame();
+      void startGame(levelId);
     },
   };
   applyDevSettings();
@@ -505,7 +520,15 @@ declare global {
     exowingDev?: {
       settings: DevSettings;
       set: (name: DevSettingName, enabled?: boolean) => void;
-      start: (overrides?: Partial<DevSettings>) => void;
+      start: (levelId?: LevelId, overrides?: Partial<DevSettings>) => void;
     };
   }
+}
+
+function levelFromQuery(value: string | null): LevelId | null {
+  if (!value) return null;
+  const numeric = Number(value);
+  if (LEVEL_IDS.includes(numeric as LevelId)) return numeric as LevelId;
+  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  return LEVEL_IDS.find((id) => LEVELS[id].name.toLowerCase().replace(/[^a-z0-9]+/g, '-') === normalized) ?? null;
 }

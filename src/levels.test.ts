@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { LevelDefinition } from './levels';
+import { LEVELS, type LevelDefinition } from './levels';
 
 describe('level definitions', () => {
   it('allow environments without a surface or scenery systems', () => {
@@ -24,5 +24,11 @@ describe('level definitions', () => {
     } satisfies LevelDefinition;
 
     expect(openSpace.systems).toEqual([]);
+  });
+
+  it('defines the desert canyon without a water system', () => {
+    const systems = LEVELS[3].systems.map((definition) => definition.create());
+
+    expect(systems.map((system) => system.id)).toEqual(['desert-canyon']);
   });
 });

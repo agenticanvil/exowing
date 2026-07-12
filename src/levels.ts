@@ -1,8 +1,9 @@
 import { islandField } from './world/islandSystem';
 import { oceanSurface } from './world/waterSystem';
+import { desertCanyon } from './world/desertCanyonSystem';
 import type { LevelEnvironment, WorldSystemDefinition } from './world/worldSystem';
 
-export type LevelId = 1 | 2;
+export type LevelId = 1 | 2 | 3;
 
 export type LevelDefinition = {
   id: LevelId;
@@ -56,4 +57,25 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
       islandField({ style: 'spires', color: 0x172329 }),
     ],
   },
+  3: {
+    id: 3,
+    name: 'Sunscar Canyon',
+    environment: {
+      horizon: 0xe9a45f,
+      zenith: 0x72bdd5,
+      upperSky: 0xb8dce2,
+      sunset: 0xffc27b,
+      sunDirection: [-0.55, 0.5, 0.66],
+      sunColor: 0xffd7a1,
+      sunIntensity: 2.35,
+      hemisphereSky: 0xcde7e8,
+      hemisphereGround: 0x713b27,
+      hemisphereIntensity: 2.1,
+      skySunIntensity: 0.75,
+      exposure: 0.9,
+    },
+    systems: [desertCanyon({ sand: 0xc9823f, rock: [0x9a4027, 0xc45f31, 0xe18443] })],
+  },
 };
+
+export const LEVEL_IDS = Object.keys(LEVELS).map(Number) as LevelId[];
