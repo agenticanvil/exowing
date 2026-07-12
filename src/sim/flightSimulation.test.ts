@@ -31,6 +31,31 @@ describe('FlightSimulation', () => {
     expect(sim.score).toBeGreaterThan(0);
   });
 
+  it('detects swept projectile hits between frames without accepting a near miss', () => {
+    const createSim = (shotY: number) => {
+      const sim = new FlightSimulation();
+      sim.enemies.length = 0;
+      sim.projectiles.length = 0;
+      sim.enemies.push({
+        id: 999, position: { x: 0, y: 4, z: 0 }, radius: 1.25, railDistance: 0,
+        offsetX: 0, offsetY: 4, phase: 0, sectionIndex: 0, controller: 'formation',
+        scatterVelocity: { x: 0, y: 0, z: 0 },
+      });
+      sim.projectiles.push({
+        id: 1000, position: { x: -5, y: shotY, z: 0 }, velocity: { x: 100, y: 0, z: 0 },
+        radius: 0.3, owner: 'player',
+      });
+      return sim;
+    };
+
+    const hit = createSim(4);
+    expect(hit.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 0.1).enemyHits).toBe(1);
+
+    const nearMiss = createSim(5.56);
+    expect(nearMiss.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 0.1).enemyHits).toBe(0);
+    expect(nearMiss.enemies.some((enemy) => enemy.id === 999)).toBe(true);
+  });
+
   it('smoothly accelerates and brakes without jumping to the target pace', () => {
     const sim = new FlightSimulation();
     sim.step({ steerX: 0, steerY: 0, fire: false, pace: 1 }, 1 / 60);

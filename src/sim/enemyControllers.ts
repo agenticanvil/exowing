@@ -4,6 +4,8 @@ import { railFrameAtDistance } from './railSystem';
 const MAX_X = 14;
 const MIN_Y = 0.8;
 const MAX_Y = 13;
+const STANDARD_MAX_HORIZONTAL_SPEED = 7;
+const STANDARD_MAX_VERTICAL_SPEED = 5;
 
 export type EnemyControlContext = {
   elapsed: number;
@@ -95,8 +97,8 @@ function controlStandardEnemy(enemy: EnemyState, state: EnemyControllerState, co
   const edgeX = enemy.offsetX < -MAX_X + 2 ? 5 : enemy.offsetX > MAX_X - 2 ? -5 : 0;
   const edgeY = enemy.offsetY < MIN_Y + 1.5 ? 4 : enemy.offsetY > MAX_Y - 1.5 ? -4 : 0;
   return {
-    offsetVelocityX: clamp(state.desiredX + edgeX, -8, 8),
-    offsetVelocityY: clamp(state.desiredY + edgeY, -6, 6),
+    offsetVelocityX: clamp(state.desiredX + edgeX, -STANDARD_MAX_HORIZONTAL_SPEED, STANDARD_MAX_HORIZONTAL_SPEED),
+    offsetVelocityY: clamp(state.desiredY + edgeY, -STANDARD_MAX_VERTICAL_SPEED, STANDARD_MAX_VERTICAL_SPEED),
     depthSpeed: state.desiredDepthSpeed,
     fire,
   };
