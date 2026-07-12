@@ -3,6 +3,7 @@ import { railFrameAtDistance, railOffsetPosition, RAIL_SPEED, SECTION_LENGTH, SE
 import { controlEnemy } from './enemyControllers';
 import { createWorld, type WorldRuntime } from '../world/worldSystem';
 import { distanceSquared, sweptSpheresIntersect } from './collision';
+import { removeWhere } from '../core/collections';
 
 const PLAYER_SPEED = 12;
 export const BARREL_ROLL_DURATION = 0.5;
@@ -242,7 +243,4 @@ export class FlightSimulation {
 function clamp(value: number, min: number, max: number) { return Math.max(min, Math.min(max, value)); }
 function moveTowards(value: number, target: number, maxDelta: number) {
   return Math.abs(target - value) <= maxDelta ? target : value + Math.sign(target - value) * maxDelta;
-}
-function removeWhere<T>(items: T[], predicate: (item: T) => boolean) {
-  for (let i = items.length - 1; i >= 0; i--) if (predicate(items[i])) items.splice(i, 1);
 }

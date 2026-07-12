@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { railOffsetPosition } from '../sim/railSystem';
 import type { IslandState } from '../sim/types';
 import { GROUND_SURFACE_Y, type WorldAttachContext, type WorldStepContext, type WorldSystem, type WorldSystemDefinition } from './worldSystem';
+import { removeWhere } from '../core/collections';
+import { mulberry32 } from '../core/random';
 
 const STREAM_AHEAD = 220;
 const CLEANUP_MARGIN = 38;
@@ -193,18 +195,4 @@ function hash(value: number) {
   let result = Math.imul(Math.floor(value) + 1, 0x45d9f3b);
   result = Math.imul(result ^ result >>> 16, 0x45d9f3b);
   return (result ^ result >>> 16) >>> 0;
-}
-
-function mulberry32(seed: number) {
-  return () => {
-    seed |= 0;
-    seed = seed + 0x6d2b79f5 | 0;
-    let value = Math.imul(seed ^ seed >>> 15, 1 | seed);
-    value = value + Math.imul(value ^ value >>> 7, 61 | value) ^ value;
-    return ((value ^ value >>> 14) >>> 0) / 4294967296;
-  };
-}
-
-function removeWhere<T>(items: T[], predicate: (item: T) => boolean) {
-  for (let index = items.length - 1; index >= 0; index--) if (predicate(items[index])) items.splice(index, 1);
 }
