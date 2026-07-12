@@ -15,31 +15,42 @@ const ENEMY_CLEANUP_MARGIN = 180;
 const ENEMY_SCATTER_LEAD = 42;
 const ENEMY_FORWARD_SPEED = 7;
 const ENEMY_SHOT_SPEED = 38;
+const BOSS_SHOT_SPEED = 48;
+const WAVE_OFFSET = 130;
+const BOSS_DISTANCE = SECTION_SPAN * 2 + 130;
+const BOSS_HEALTH = 24;
 export const ENEMY_MIN_PLAYER_DISTANCE = 14;
 const ENEMY_RETREAT_SPEED = 32;
 export const FLIGHT_WINDOW = { maxX: 14, minY: 0.8, maxY: 13, cameraPadding: 1.8 } as const;
 
 export class FlightSimulation {
-  readonly player: PlayerState = { offsetX: 0, offsetY: 4, velocityX: 0, velocityY: 0, health: 5 };
+  readonly player: PlayerState;
   readonly enemies: EnemyState[] = [];
   readonly projectiles: ProjectileState[] = [];
   readonly islands: IslandState[] = [];
   railDistance = 0;
   railSpeed = RAIL_SPEED;
-  score = 0;
+  score: number;
   invulnerable = false;
   private nextId = 1;
   private fireCooldown = 0;
   private elapsed = 0;
+  private readonly difficultyMultiplier: number;
   private nextIslandDistance = 34;
-  private nextEnemySection = 0;
+  private spawnedWaves = 0;
+  private bossSpawned = false;
 
-  constructor() {
+  constructor(options: { health?: number; score?: number; level?: number } = {}) {
+    this.player = { offsetX: 0, offsetY: 4, velocityX: 0, velocityY: 0, health: options.health ?? 5 };
+    this.score = options.score ?? 0;
+    this.difficultyMultiplier = 1.2 ** Math.max(0, (options.level ?? 1) - 1);
     this.streamWorld();
   }
 
+  get boss() { return this.enemies.find((enemy) => enemy.kind === 'boss'); }
+
   step(command: PlayerCommand, dt: number): FlightStepResult {
-    const result: FlightStepResult = { shotsFired: 0, enemyHits: 0, kills: 0, scoreDelta: 0, playerHits: 0 };
+    const result: FlightStepResult = { shotsFired: 0, enemyHits: 0, kills: 0, scoreDelta: 0, playerHits: 0, bossDefeated: false };
     const targetRailSpeed = command.pace > 0 ? FAST_RAIL_SPEED : command.pace < 0 ? SLOW_RAIL_SPEED : RAIL_SPEED;
     this.railSpeed = moveTowards(this.railSpeed, targetRailSpeed, PACE_RAMP_RATE * dt);
     this.railDistance += this.railSpeed * dt;
@@ -68,25 +79,40 @@ export class FlightSimulation {
     this.updateEnemies(dt);
 
     const hitShots = new Set<number>();
-    const hitEnemies = new Set<number>();
+    const damagedEnemies = new Set<number>();
     for (const shot of this.projectiles) for (const enemy of this.enemies) {
       if (shot.owner !== 'player') continue;
       const radius = shot.radius + enemy.radius;
-      if (distanceSquared(shot.position, enemy.position) <= radius * radius) { hitShots.add(shot.id); hitEnemies.add(enemy.id); break; }
+      if (distanceSquared(shot.position, enemy.position) <= radius * radius) {
+        hitShots.add(shot.id);
+        damagedEnemies.add(enemy.id);
+        break;
+      }
+    }
+
+    const killedEnemies = new Set<number>();
+    for (const enemy of this.enemies) if (damagedEnemies.has(enemy.id)) {
+      enemy.health = (enemy.health ?? 1) - 1;
+      if (enemy.health <= 0) {
+        killedEnemies.add(enemy.id);
+        if (enemy.kind === 'boss') result.bossDefeated = true;
+      }
     }
 
     const playerWorld = railOffsetPosition(this.railDistance, this.player.offsetX, this.player.offsetY);
+    let damageTaken = 0;
     for (const shot of this.projectiles) if (shot.owner === 'enemy' && distanceSquared(shot.position, playerWorld) <= (shot.radius + 0.9) ** 2) {
       hitShots.add(shot.id);
       result.playerHits++;
+      damageTaken += shot.damage ?? 1;
     }
-    if (!this.invulnerable) this.player.health = Math.max(0, this.player.health - result.playerHits);
+    if (!this.invulnerable) this.player.health = Math.max(0, this.player.health - damageTaken);
     removeWhere(this.projectiles, (shot) => hitShots.has(shot.id) || distanceSquared(shot.position, playerWorld) > 150 * 150);
-    removeWhere(this.enemies, (enemy) => hitEnemies.has(enemy.id) || enemy.railDistance < this.railDistance - ENEMY_CLEANUP_MARGIN || distanceSquared(enemy.position, playerWorld) > 260 * 260);
+    removeWhere(this.enemies, (enemy) => killedEnemies.has(enemy.id) || enemy.railDistance < this.railDistance - ENEMY_CLEANUP_MARGIN || distanceSquared(enemy.position, playerWorld) > 260 * 260);
     removeWhere(this.islands, (island) => island.railDistance < this.railDistance - CLEANUP_MARGIN);
-    result.enemyHits = hitEnemies.size;
-    result.kills = hitEnemies.size;
-    result.scoreDelta = hitEnemies.size * 100;
+    result.enemyHits = damagedEnemies.size;
+    result.kills = killedEnemies.size;
+    result.scoreDelta = (killedEnemies.size - (result.bossDefeated ? 1 : 0)) * 100 + (result.bossDefeated ? 2500 : 0);
     this.score += result.scoreDelta;
     return result;
   }
@@ -102,20 +128,43 @@ export class FlightSimulation {
       this.nextIslandDistance += ISLAND_SPACING;
     }
 
-    while (this.nextEnemySection * SECTION_SPAN + 130 <= this.railDistance + STREAM_AHEAD) {
-      this.spawnEnemyGroup(this.nextEnemySection++);
+    while (this.spawnedWaves < 2 && this.waveDistance(this.spawnedWaves) <= this.railDistance + STREAM_AHEAD) {
+      this.spawnEnemyGroup(this.spawnedWaves, this.waveDistance(this.spawnedWaves));
+      this.spawnedWaves++;
+    }
+    const secondWaveResolved = this.spawnedWaves === 2 && this.enemies
+      .filter((enemy) => enemy.kind !== 'boss' && enemy.sectionIndex === 1)
+      .every((enemy) => enemy.scatterVelocity !== undefined);
+    const completedSecondTurn = this.railDistance >= SECTION_SPAN * 2;
+    if (!this.bossSpawned && secondWaveResolved && completedSecondTurn) {
+      this.spawnBoss();
+      this.bossSpawned = true;
     }
   }
 
-  private spawnEnemyGroup(sectionIndex: number) {
-    const groupDistance = sectionIndex * SECTION_SPAN + 130;
+  private waveDistance(waveIndex: number) {
+    return waveIndex * SECTION_SPAN + WAVE_OFFSET;
+  }
+
+  private spawnEnemyGroup(sectionIndex: number, groupDistance: number) {
     const formation = [[-5, 5], [0, 7], [5, 5], [-2.5, 3], [2.5, 3]];
     formation.forEach(([x, y], index) => {
       this.enemies.push({
         id: this.nextId++, position: railOffsetPosition(groupDistance, x, y), radius: 1.25,
         railDistance: groupDistance - index * 2, offsetX: x, offsetY: y, phase: sectionIndex * 1.7 + index,
-        sectionIndex, controller: 'standard',
+        sectionIndex, controller: 'standard', kind: 'standard',
+        health: this.difficultyMultiplier, maxHealth: this.difficultyMultiplier,
+        exitRailDistance: sectionIndex * SECTION_SPAN + SECTION_LENGTH - ENEMY_SCATTER_LEAD,
       });
+    });
+  }
+
+  private spawnBoss() {
+    this.enemies.push({
+      id: this.nextId++, position: railOffsetPosition(BOSS_DISTANCE, 0, 7), radius: 3.5,
+      railDistance: BOSS_DISTANCE, offsetX: 0, offsetY: 7, phase: 0, sectionIndex: 2,
+      controller: 'boss', kind: 'boss',
+      health: BOSS_HEALTH * this.difficultyMultiplier, maxHealth: BOSS_HEALTH * this.difficultyMultiplier,
     });
   }
 
@@ -135,8 +184,8 @@ export class FlightSimulation {
       enemies: this.enemies,
     };
     for (const enemy of this.enemies) {
-      const scatterAt = enemy.sectionIndex * SECTION_SPAN + SECTION_LENGTH - ENEMY_SCATTER_LEAD;
-      if (!enemy.scatterVelocity && this.railDistance >= scatterAt) {
+      const scatterAt = enemy.exitRailDistance ?? enemy.sectionIndex * SECTION_SPAN + SECTION_LENGTH - ENEMY_SCATTER_LEAD;
+      if (enemy.kind !== 'boss' && !enemy.scatterVelocity && this.railDistance >= scatterAt) {
         const rail = railFrameAtDistance(enemy.railDistance);
         const side = enemy.offsetX < 0 ? -1 : 1;
         enemy.scatterVelocity = { x: rail.right.x * side * 18 + rail.forward.x * 8, y: 8 + Math.abs(enemy.offsetX), z: rail.right.z * side * 18 + rail.forward.z * 8 };
@@ -159,7 +208,8 @@ export class FlightSimulation {
 
   private fireEnemyShot(enemy: EnemyState, playerPosition: { x: number; y: number; z: number }, playerVelocity: { x: number; y: number; z: number }) {
     const distance = Math.sqrt(distanceSquared(enemy.position, playerPosition));
-    const leadTime = Math.min(1.2, distance / ENEMY_SHOT_SPEED);
+    const shotSpeed = enemy.kind === 'boss' ? BOSS_SHOT_SPEED : ENEMY_SHOT_SPEED;
+    const leadTime = Math.min(1.2, distance / shotSpeed);
     const error = Math.sin(enemy.id * 12.9898 + this.elapsed * 2.1) * 2.2;
     const target = {
       x: playerPosition.x + playerVelocity.x * leadTime * 0.35 + error,
@@ -168,7 +218,12 @@ export class FlightSimulation {
     };
     const dx = target.x - enemy.position.x, dy = target.y - enemy.position.y, dz = target.z - enemy.position.z;
     const length = Math.hypot(dx, dy, dz) || 1;
-    this.projectiles.push({ id: this.nextId++, position: { ...enemy.position }, velocity: { x: dx / length * ENEMY_SHOT_SPEED, y: dy / length * ENEMY_SHOT_SPEED, z: dz / length * ENEMY_SHOT_SPEED }, radius: 0.26, owner: 'enemy' });
+    const spreads = enemy.kind === 'boss' ? [-0.12, 0, 0.12] : [0];
+    for (const spread of spreads) this.projectiles.push({
+      id: this.nextId++, position: { ...enemy.position },
+      velocity: { x: dx / length * shotSpeed + spread * shotSpeed, y: dy / length * shotSpeed, z: dz / length * shotSpeed - spread * shotSpeed * 0.3 },
+      radius: enemy.kind === 'boss' ? 0.34 : 0.26, owner: 'enemy', damage: this.difficultyMultiplier,
+    });
   }
 }
 

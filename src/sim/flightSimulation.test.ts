@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FlightSimulation } from './flightSimulation';
-import { railOffsetPosition, SECTION_LENGTH } from './railSystem';
+import { railOffsetPosition, SECTION_LENGTH, SECTION_SPAN } from './railSystem';
 import type { EnemyState } from './types';
 
 describe('FlightSimulation', () => {
@@ -85,5 +85,60 @@ describe('FlightSimulation', () => {
     expect(sim.projectiles.some((shot) => shot.owner === 'enemy')).toBe(false);
     for (let i = 0; i < 30; i++) sim.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 1 / 60);
     expect(sim.enemies).toContain(enemy);
+  });
+
+  it('requires repeated hits to defeat a boss and reports level completion', () => {
+    const sim = new FlightSimulation();
+    sim.enemies.length = 0;
+    const boss: EnemyState = {
+      id: 998, position: railOffsetPosition(40, 0, 4), radius: 3.5,
+      railDistance: 40, offsetX: 0, offsetY: 4, phase: 0, sectionIndex: 2,
+      controller: 'formation', kind: 'boss', health: 2, maxHealth: 2,
+    };
+    sim.enemies.push(boss);
+
+    let completed = false;
+    for (let frame = 0; frame < 180 && !completed; frame++) {
+      const result = sim.step({ steerX: 0, steerY: 0, fire: frame % 20 === 0, pace: 0 }, 1 / 60);
+      completed = result.bossDefeated;
+    }
+    expect(completed).toBe(true);
+    expect(sim.enemies).not.toContain(boss);
+    expect(sim.score).toBeGreaterThanOrEqual(2500);
+  });
+
+  it('waits until the second wave resolves and the second turn ends before spawning the boss', () => {
+    const sim = new FlightSimulation();
+    sim.invulnerable = true;
+    while (sim.railDistance < SECTION_SPAN * 2 - 1) {
+      sim.step({ steerX: 0, steerY: 0, fire: false, pace: 1 }, 1 / 30);
+    }
+    expect(sim.boss).toBeUndefined();
+    expect(new Set(sim.enemies.filter((enemy) => enemy.kind !== 'boss').map((enemy) => enemy.sectionIndex)))
+      .toEqual(new Set([1]));
+    expect(sim.enemies.filter((enemy) => enemy.sectionIndex === 1).every((enemy) => enemy.scatterVelocity)).toBe(true);
+
+    while (sim.railDistance < SECTION_SPAN * 2 + 1) {
+      sim.step({ steerX: 0, steerY: 0, fire: false, pace: 1 }, 1 / 30);
+    }
+    expect(sim.boss).toBeDefined();
+    expect(sim.boss!.railDistance - sim.railDistance).toBeGreaterThan(100);
+    expect(sim.boss!.railDistance - sim.railDistance).toBeLessThan(140);
+  });
+
+  it('compounds enemy health and hostile damage by twenty percent per level', () => {
+    const first = new FlightSimulation({ level: 1 });
+    const third = new FlightSimulation({ level: 3 });
+    expect(first.enemies[0].maxHealth).toBeCloseTo(1);
+    expect(third.enemies[0].maxHealth).toBeCloseTo(1.44);
+
+    const second = new FlightSimulation({ level: 2 });
+    second.enemies.length = 0;
+    second.projectiles.push({
+      id: 9999, position: railOffsetPosition(0, 0, 4), velocity: { x: 0, y: 0, z: 0 },
+      radius: 2, owner: 'enemy', damage: 1.2,
+    });
+    second.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 1 / 60);
+    expect(second.player.health).toBeCloseTo(3.8);
   });
 });

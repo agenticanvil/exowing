@@ -23,6 +23,41 @@ canvas { display: block; }
 
 .damage-vignette--active { animation: damage-flash 480ms ease-out both; }
 
+.level-transition {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  color: white;
+  background: #000;
+  opacity: 0;
+  visibility: hidden;
+  font-size: clamp(34px, 6vw, 68px);
+  letter-spacing: 0.22em;
+}
+
+.level-transition--active {
+  visibility: visible;
+  animation: level-cover 900ms ease-in forwards;
+}
+
+.level-transition--reveal {
+  visibility: visible;
+  animation: level-reveal 850ms ease-out forwards;
+}
+
+@keyframes level-cover {
+  0% { opacity: 0; }
+  70%, 100% { opacity: 1; }
+}
+
+@keyframes level-reveal {
+  0%, 28% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 @keyframes damage-flash {
   0% { opacity: 0.95; }
   18% { opacity: 0.72; }
@@ -238,6 +273,21 @@ canvas { display: block; }
 .hud__score-label { color: #8effed; font-size: 9px; font-weight: 800; letter-spacing: 0.22em; }
 .hud__score-value { color: white; font-size: 25px; font-weight: 900; letter-spacing: 0.06em; line-height: 1; text-shadow: 0 0 10px rgb(103 255 228 / 50%); }
 .hud__fps { position: absolute; top: 52px; right: 4px; font-size: 11px; }
+
+.hud__boss {
+  position: absolute;
+  top: 68px;
+  left: 50%;
+  width: min(480px, 62vw);
+  padding: 8px 18px 10px;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, transparent, rgb(50 7 22 / 88%) 12% 88%, transparent);
+}
+
+.hud__boss[hidden] { display: none; }
+.hud__boss .hud__eyebrow { color: #ff9ab2; }
+.hud__boss-track { height: 10px; padding: 2px; background: rgb(20 0 7 / 76%); border: 1px solid rgb(255 143 169 / 45%); }
+.hud__boss-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #8f1637, #ff456c, #ff9ab2); box-shadow: 0 0 12px rgb(255 55 103 / 70%); transition: width 100ms linear; }
 
 @media (max-width: 520px) {
   .hud { inset: 12px; }

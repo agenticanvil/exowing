@@ -31,6 +31,7 @@ export class GameView {
   private readonly islandViews = new Map<number, THREE.Mesh>();
   private readonly enemyGeometry = new THREE.SphereGeometry(1.25, 16, 10);
   private readonly enemyMaterial = new THREE.MeshStandardMaterial({ color: 0xf04453, roughness: 0.65 });
+  private readonly bossMaterial = new THREE.MeshStandardMaterial({ color: 0x8f1637, emissive: 0x3d0718, emissiveIntensity: 0.8, roughness: 0.42 });
   private readonly shotCoreGeometry = createBoltGeometry(0.085, 2.35, 12);
   private readonly shotGlowGeometry = createBoltGeometry(0.19, 2.9, 12);
   private readonly islandMaterial: THREE.MeshStandardMaterial;
@@ -106,7 +107,7 @@ export class GameView {
     const inputBank = sim.player.velocityX / 12 * INPUT_BANK;
     this.ship.rotation.z = turnBank + inputBank;
     this.ship.rotation.x = sim.player.velocityY * 0.012;
-    syncMeshes(this.scene, this.enemyViews, sim.enemies, this.enemyGeometry, this.enemyMaterial);
+    syncEnemyMeshes(this.scene, this.enemyViews, sim.enemies, this.enemyGeometry, this.enemyMaterial, this.bossMaterial);
     syncProjectiles(this.scene, this.projectileViews, sim.projectiles, this.shotCoreGeometry, this.shotGlowGeometry);
     syncIslands(this.scene, this.islandViews, sim.islands, this.islandMaterial, this.islandStyle);
     const windowCenterY = (FLIGHT_WINDOW.minY + FLIGHT_WINDOW.maxY) / 2;
@@ -273,6 +274,28 @@ function syncMeshes(
     let mesh = views.get(state.id);
     if (!mesh) { mesh = new THREE.Mesh(geometry, material); views.set(state.id, mesh); scene.add(mesh); }
     mesh.position.set(state.position.x, state.position.y, state.position.z);
+  }
+}
+
+function syncEnemyMeshes(
+  scene: THREE.Scene,
+  views: Map<number, THREE.Mesh>,
+  states: FlightSimulation['enemies'],
+  geometry: THREE.BufferGeometry,
+  enemyMaterial: THREE.Material,
+  bossMaterial: THREE.Material,
+) {
+  const live = new Set(states.map((state) => state.id));
+  for (const [id, mesh] of views) if (!live.has(id)) { scene.remove(mesh); views.delete(id); }
+  for (const state of states) {
+    let mesh = views.get(state.id);
+    if (!mesh) {
+      mesh = new THREE.Mesh(geometry, state.kind === 'boss' ? bossMaterial : enemyMaterial);
+      views.set(state.id, mesh);
+      scene.add(mesh);
+    }
+    mesh.position.set(state.position.x, state.position.y, state.position.z);
+    mesh.scale.setScalar(state.kind === 'boss' ? state.radius / 1.25 : 1);
   }
 }
 

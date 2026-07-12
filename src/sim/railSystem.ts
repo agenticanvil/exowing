@@ -1,7 +1,7 @@
 import type { Vec3 } from './types';
 
 export const RAIL_SPEED = 15;
-export const SECTION_DURATION = 30;
+export const SECTION_DURATION = 20;
 export const SECTION_LENGTH = RAIL_SPEED * SECTION_DURATION;
 export const TURN_START_DISTANCE = SECTION_LENGTH;
 export const TURN_LENGTH = 60;

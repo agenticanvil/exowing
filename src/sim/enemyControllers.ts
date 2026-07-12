@@ -19,6 +19,7 @@ export type EnemyControl = { offsetVelocityX: number; offsetVelocityY: number; d
 const controllers: Record<EnemyControllerId, (enemy: EnemyState, state: EnemyControllerState, context: EnemyControlContext, dt: number) => EnemyControl> = {
   standard: controlStandardEnemy,
   formation: () => ({ offsetVelocityX: 0, offsetVelocityY: 0, depthSpeed: 0, fire: false }),
+  boss: controlBoss,
 };
 
 export function controlEnemy(enemy: EnemyState, context: EnemyControlContext, dt: number): EnemyControl {
@@ -31,6 +32,18 @@ export function controlEnemy(enemy: EnemyState, context: EnemyControlContext, dt
     desiredDepthSpeed: 0,
   };
   return controllers[controller](enemy, state, context, dt);
+}
+
+function controlBoss(enemy: EnemyState, state: EnemyControllerState, context: EnemyControlContext, dt: number): EnemyControl {
+  state.fireCooldown -= dt;
+  const fire = state.fireCooldown <= 0 && enemy.railDistance - context.playerRailDistance > 20;
+  if (fire) state.fireCooldown = 0.62;
+  return {
+    offsetVelocityX: Math.sin(context.elapsed * 0.72 + enemy.phase) * 4.2,
+    offsetVelocityY: Math.cos(context.elapsed * 0.91 + enemy.phase) * 2.4,
+    depthSpeed: Math.sin(context.elapsed * 0.4) * 1.5,
+    fire,
+  };
 }
 
 function controlStandardEnemy(enemy: EnemyState, state: EnemyControllerState, context: EnemyControlContext, dt: number): EnemyControl {

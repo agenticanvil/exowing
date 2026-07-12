@@ -69,24 +69,44 @@ app.innerHTML = `
       </div>
     </div>` : ''}
   <div class="damage-vignette" id="damage-vignette" aria-hidden="true"></div>
+  <div class="level-transition" id="level-transition" aria-live="polite"><span id="level-transition-label">LEVEL 1</span></div>
+  <div class="menu" id="game-over-menu" hidden>
+    <h1 class="menu__title">GAME OVER</h1>
+    <div class="menu__actions">
+      <button id="retry-button" type="button">RETRY</button>
+      <button id="game-over-main-menu-button" type="button">MAIN MENU</button>
+    </div>
+  </div>
   <div class="hud" id="hud" hidden>
     <div class="hud__health">
       <div class="hud__eyebrow"><span>HULL INTEGRITY</span><span id="health">100%</span></div>
       <div class="hud__health-track" role="meter" aria-label="Hull integrity" aria-valuemin="0" aria-valuemax="5" aria-valuenow="5"><div class="hud__health-fill" id="health-fill"></div></div>
     </div>
     <div class="hud__score"><span class="hud__score-label">SCORE</span><span class="hud__score-value" id="score">0000</span></div>
+    <div class="hud__boss" id="boss-health" hidden>
+      <div class="hud__eyebrow"><span>GUARDIAN</span><span id="boss-health-value">100%</span></div>
+      <div class="hud__boss-track"><div class="hud__boss-fill" id="boss-health-fill"></div></div>
+    </div>
     <div class="hud__fps" id="fps" hidden>FPS 0</div>
   </div>`;
 
 let simulation = new FlightSimulation();
 const input = new InputState();
-let currentLevelId: LevelId = 1;
-let view = new GameView(appRoot, LEVELS[currentLevelId]);
+let currentLevelNumber = 1;
+let view = new GameView(appRoot, LEVELS[1]);
 const score = document.querySelector<HTMLSpanElement>('#score');
 const health = requiredElement<HTMLSpanElement>('#health');
 const healthFill = requiredElement<HTMLDivElement>('#health-fill');
 const healthTrack = requiredElement<HTMLDivElement>('.hud__health-track');
 const damageVignette = requiredElement<HTMLDivElement>('#damage-vignette');
+const levelTransition = requiredElement<HTMLDivElement>('#level-transition');
+const levelTransitionLabel = requiredElement<HTMLSpanElement>('#level-transition-label');
+const gameOverMenu = requiredElement<HTMLDivElement>('#game-over-menu');
+const retryButton = requiredElement<HTMLButtonElement>('#retry-button');
+const gameOverMainMenuButton = requiredElement<HTMLButtonElement>('#game-over-main-menu-button');
+const bossHealth = requiredElement<HTMLDivElement>('#boss-health');
+const bossHealthValue = requiredElement<HTMLSpanElement>('#boss-health-value');
+const bossHealthFill = requiredElement<HTMLDivElement>('#boss-health-fill');
 const fps = requiredElement<HTMLDivElement>('#fps');
 const hud = requiredElement<HTMLDivElement>('#hud');
 const mainMenu = requiredElement<HTMLDivElement>('#main-menu');
@@ -106,7 +126,7 @@ const mainMenuButton = requiredElement<HTMLButtonElement>('#main-menu-button');
 const fixedDt = 1 / 60;
 let previous = performance.now();
 let accumulator = 0;
-type GameMode = 'menu' | 'playing' | 'paused';
+type GameMode = 'menu' | 'playing' | 'paused' | 'transition' | 'gameover';
 let mode: GameMode = 'menu';
 let closeDevSettings: (() => void) | null = null;
 type DevSettingName = 'invulnerable' | 'showFps' | 'showMovementFrame' | 'showSpline';
@@ -128,11 +148,15 @@ function applyDevSettings() {
   });
 }
 
-function startGame(levelId: LevelId = currentLevelId) {
-  currentLevelId = levelId;
+function styleForLevel(levelNumber: number): LevelId {
+  return levelNumber % 2 === 1 ? 1 : 2;
+}
+
+function startGame(levelNumber = 1, carry?: { health: number; score: number }) {
+  currentLevelNumber = levelNumber;
   view.dispose();
-  simulation = new FlightSimulation();
-  view = new GameView(appRoot, LEVELS[currentLevelId]);
+  simulation = new FlightSimulation({ ...carry, level: currentLevelNumber });
+  view = new GameView(appRoot, LEVELS[styleForLevel(currentLevelNumber)]);
   view.setRenderScale(Number(renderScaleSelect.value));
   view.setAntiAliasing(antiAliasingInput.checked);
   applyDevSettings();
@@ -141,11 +165,13 @@ function startGame(levelId: LevelId = currentLevelId) {
   pauseMenu.hidden = true;
   controlsMenu.hidden = true;
   settingsMenu.hidden = true;
+  gameOverMenu.hidden = true;
   const devSettingsMenu = document.querySelector<HTMLDivElement>('#dev-settings-menu');
   if (devSettingsMenu) devSettingsMenu.hidden = true;
   closeDevSettings = null;
   hud.hidden = false;
   damageVignette.classList.remove('damage-vignette--active');
+  levelTransition.className = 'level-transition';
   accumulator = 0;
   previous = performance.now();
   updateRenderResolution();
@@ -169,6 +195,7 @@ function returnToMainMenu() {
   pauseMenu.hidden = true;
   mainMenu.hidden = false;
   hud.hidden = true;
+  gameOverMenu.hidden = true;
   startButton.focus();
 }
 
@@ -201,7 +228,9 @@ function closeSettings() {
   settingsButton.focus();
 }
 
-startButton.addEventListener('click', () => startGame(currentLevelId));
+startButton.addEventListener('click', () => startGame(1));
+retryButton.addEventListener('click', () => startGame(1));
+gameOverMainMenuButton.addEventListener('click', returnToMainMenu);
 continueButton.addEventListener('click', continueGame);
 controlsButton.addEventListener('click', openControls);
 settingsButton.addEventListener('click', openSettings);
@@ -265,14 +294,24 @@ function frame(now: number) {
     simulation.invulnerable = devSettings.invulnerable;
     const result = simulation.step(input.command(), fixedDt);
     if (result.playerHits > 0) flashDamageVignette();
+    if (simulation.player.health <= 0) showGameOver();
+    else if (result.bossDefeated) beginNextLevel();
     accumulator -= fixedDt;
   }
   if (score) score.textContent = simulation.score.toString().padStart(4, '0');
   const healthPercent = simulation.player.health / 5 * 100;
-  health.textContent = `${healthPercent}%`;
+  health.textContent = `${Math.round(healthPercent)}%`;
   healthFill.style.width = `${healthPercent}%`;
   healthFill.classList.toggle('hud__health-fill--critical', simulation.player.health <= 2);
   healthTrack.setAttribute('aria-valuenow', simulation.player.health.toString());
+  const boss = simulation.boss;
+  const bossEngaged = boss && boss.railDistance - simulation.railDistance < 140;
+  bossHealth.hidden = !bossEngaged;
+  if (boss) {
+    const bossPercent = Math.max(0, (boss.health ?? 0) / (boss.maxHealth ?? 1) * 100);
+    bossHealthValue.textContent = `${Math.ceil(bossPercent)}%`;
+    bossHealthFill.style.width = `${bossPercent}%`;
+  }
   if (devSettings.showFps) {
     fpsFrames++;
     fpsElapsed += frameDt;
@@ -292,6 +331,29 @@ function flashDamageVignette() {
   damageVignette.classList.remove('damage-vignette--active');
   void damageVignette.offsetWidth;
   damageVignette.classList.add('damage-vignette--active');
+}
+
+function showGameOver() {
+  if (mode !== 'playing') return;
+  mode = 'gameover';
+  hud.hidden = true;
+  gameOverMenu.hidden = false;
+  retryButton.focus();
+}
+
+function beginNextLevel() {
+  if (mode !== 'playing') return;
+  mode = 'transition';
+  const nextLevel = currentLevelNumber + 1;
+  const carry = { health: simulation.player.health, score: simulation.score };
+  levelTransitionLabel.textContent = `LEVEL ${nextLevel}`;
+  levelTransition.className = 'level-transition level-transition--active';
+  window.setTimeout(() => {
+    startGame(nextLevel, carry);
+    levelTransitionLabel.textContent = `LEVEL ${nextLevel}`;
+    levelTransition.className = 'level-transition level-transition--reveal';
+    window.setTimeout(() => { levelTransition.className = 'level-transition'; }, 850);
+  }, 900);
 }
 
 function requiredElement<T extends Element>(selector: string): T {

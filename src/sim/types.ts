@@ -15,7 +15,7 @@ export type PlayerState = {
   health: number;
 };
 
-export type EnemyControllerId = 'standard' | 'formation';
+export type EnemyControllerId = 'standard' | 'formation' | 'boss';
 export type EnemyControllerState = {
   decisionCooldown: number;
   fireCooldown: number;
@@ -33,11 +33,15 @@ export type EnemyState = {
   offsetY: number;
   phase: number;
   sectionIndex: number;
+  kind?: 'standard' | 'boss';
+  health?: number;
+  maxHealth?: number;
+  exitRailDistance?: number;
   controller?: EnemyControllerId;
   controllerState?: EnemyControllerState;
   scatterVelocity?: Vec3;
 };
-export type ProjectileState = { id: number; position: Vec3; velocity: Vec3; radius: number; owner: 'player' | 'enemy' };
+export type ProjectileState = { id: number; position: Vec3; velocity: Vec3; radius: number; owner: 'player' | 'enemy'; damage?: number };
 export type IslandState = { id: number; position: Vec3; size: Vec3; rotation: number; railDistance: number };
 
 export type FlightStepResult = {
@@ -46,4 +50,5 @@ export type FlightStepResult = {
   kills: number;
   scoreDelta: number;
   playerHits: number;
+  bossDefeated: boolean;
 };
