@@ -28,6 +28,11 @@ export class SkyView {
   update(cameraPosition: THREE.Vector3) {
     this.mesh.position.copy(cameraPosition);
   }
+
+  dispose() {
+    this.mesh.geometry.dispose();
+    this.mesh.material.dispose();
+  }
 }
 
 const skyVertexShader = /* glsl */ `

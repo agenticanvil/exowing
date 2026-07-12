@@ -28,6 +28,11 @@ export class WingtipVortexView {
     const strength = THREE.MathUtils.clamp((speed - 6) / 19, 0, 1);
     for (const trail of this.trails) trail.update(this.elapsed, strength);
   }
+
+  dispose() {
+    for (const trail of this.trails) trail.dispose();
+    this.trails.length = 0;
+  }
 }
 
 export class TrailHistory {
@@ -74,6 +79,12 @@ class VortexTrail {
     this.material.uniforms.uTime.value = time;
     this.material.uniforms.uStrength.value = strength;
     this.writeGeometry();
+  }
+
+  dispose() {
+    this.mesh.removeFromParent();
+    this.mesh.geometry.dispose();
+    this.material.dispose();
   }
 
   private writeGeometry() {

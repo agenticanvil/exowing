@@ -151,22 +151,23 @@ export class GameView {
 
   dispose() {
     window.removeEventListener('resize', this.resize);
-    const geometries = new Set<THREE.BufferGeometry>();
-    const materials = new Set<THREE.Material>();
-    this.scene.traverse((object) => {
-      if (!(object instanceof THREE.Mesh || object instanceof THREE.Line)) return;
-      geometries.add(object.geometry);
-      const objectMaterials = Array.isArray(object.material) ? object.material : [object.material];
-      for (const material of objectMaterials) materials.add(material);
-    });
-    for (const geometry of geometries) geometry.dispose();
-    for (const material of materials) material.dispose();
+    this.world.dispose();
+    this.wingtipVortices?.dispose();
+    disposeObject(this.ship);
+    for (const group of this.projectileViews.values()) disposeObject(group, false);
+    this.enemyGeometry.dispose();
+    this.enemyMaterial.dispose();
+    this.bossMaterial.dispose();
+    this.shotCoreGeometry.dispose();
+    this.shotGlowGeometry.dispose();
+    this.sky.dispose();
+    disposeObject(this.flightWindowGuide);
+    disposeObject(this.splineGuide);
     this.composer.dispose();
     this.renderer.renderLists.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
     this.renderer.domElement.remove();
-    this.world.dispose();
     this.enemyViews.clear();
     this.projectileViews.clear();
   }
@@ -178,6 +179,20 @@ export class GameView {
     this.renderer.setSize(innerWidth, innerHeight);
     this.composer.setSize(innerWidth, innerHeight);
   };
+}
+
+function disposeObject(root: THREE.Object3D, disposeGeometry = true) {
+  const geometries = new Set<THREE.BufferGeometry>();
+  const materials = new Set<THREE.Material>();
+  root.traverse((object) => {
+    if (!(object instanceof THREE.Mesh || object instanceof THREE.Line)) return;
+    if (disposeGeometry) geometries.add(object.geometry);
+    const objectMaterials = Array.isArray(object.material) ? object.material : [object.material];
+    for (const material of objectMaterials) materials.add(material);
+  });
+  for (const geometry of geometries) geometry.dispose();
+  for (const material of materials) material.dispose();
+  root.removeFromParent();
 }
 
 export function playerPitch(offsetY: number, velocityY: number) {
