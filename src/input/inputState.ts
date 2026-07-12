@@ -4,10 +4,17 @@ export class InputState {
   private readonly pressed = new Set<string>();
   private pendingRoll = 0;
 
-  constructor() {
-    window.addEventListener('keydown', this.onKeyDown);
-    window.addEventListener('keyup', this.onKeyUp);
-    window.addEventListener('blur', this.clear);
+  constructor(private readonly target: Pick<Window, 'addEventListener' | 'removeEventListener'> = window) {
+    target.addEventListener('keydown', this.onKeyDown as unknown as EventListener);
+    target.addEventListener('keyup', this.onKeyUp as unknown as EventListener);
+    target.addEventListener('blur', this.clear);
+  }
+
+  dispose() {
+    this.target.removeEventListener('keydown', this.onKeyDown as unknown as EventListener);
+    this.target.removeEventListener('keyup', this.onKeyUp as unknown as EventListener);
+    this.target.removeEventListener('blur', this.clear);
+    this.clear();
   }
 
   command(): PlayerCommand {
