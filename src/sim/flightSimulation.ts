@@ -1,6 +1,7 @@
-import type { EnemyState, FlightStepResult, IslandState, PlayerCommand, PlayerState, ProjectileState } from './types';
+import type { EnemyState, FlightStepResult, PlayerCommand, PlayerState, ProjectileState } from './types';
 import { railFrameAtDistance, railOffsetPosition, RAIL_SPEED, SECTION_LENGTH, SECTION_SPAN } from './railSystem';
 import { controlEnemy } from './enemyControllers';
+import { createWorld, type WorldRuntime } from '../world/worldSystem';
 
 const PLAYER_SPEED = 12;
 const SHOT_SPEED = 68;
@@ -9,8 +10,6 @@ const SLOW_RAIL_SPEED = 6;
 const FAST_RAIL_SPEED = 25;
 const PACE_RAMP_RATE = 14;
 const STREAM_AHEAD = 220;
-const ISLAND_SPACING = 42;
-const CLEANUP_MARGIN = 38;
 const ENEMY_CLEANUP_MARGIN = 180;
 const ENEMY_SCATTER_LEAD = 42;
 const ENEMY_FORWARD_SPEED = 7;
@@ -27,7 +26,7 @@ export class FlightSimulation {
   readonly player: PlayerState;
   readonly enemies: EnemyState[] = [];
   readonly projectiles: ProjectileState[] = [];
-  readonly islands: IslandState[] = [];
+  readonly world: WorldRuntime;
   railDistance = 0;
   railSpeed = RAIL_SPEED;
   score: number;
@@ -36,15 +35,16 @@ export class FlightSimulation {
   private fireCooldown = 0;
   private elapsed = 0;
   private readonly difficultyMultiplier: number;
-  private nextIslandDistance = 34;
   private spawnedWaves = 0;
   private bossSpawned = false;
 
-  constructor(options: { health?: number; score?: number; level?: number } = {}) {
+  constructor(options: { health?: number; score?: number; level?: number; world?: WorldRuntime } = {}) {
     this.player = { offsetX: 0, offsetY: 4, velocityX: 0, velocityY: 0, health: options.health ?? 5 };
     this.score = options.score ?? 0;
     this.difficultyMultiplier = 1.2 ** Math.max(0, (options.level ?? 1) - 1);
-    this.streamWorld();
+    this.world = options.world ?? createWorld([]);
+    this.streamCombat();
+    this.world.step(this.railDistance);
   }
 
   get boss() { return this.enemies.find((enemy) => enemy.kind === 'boss'); }
@@ -56,7 +56,8 @@ export class FlightSimulation {
     this.railDistance += this.railSpeed * dt;
     this.elapsed += dt;
     this.fireCooldown = Math.max(0, this.fireCooldown - dt);
-    this.streamWorld();
+    this.streamCombat();
+    this.world.step(this.railDistance);
 
     this.player.velocityX = command.steerX * PLAYER_SPEED;
     this.player.velocityY = command.steerY * PLAYER_SPEED;
@@ -109,7 +110,6 @@ export class FlightSimulation {
     if (!this.invulnerable) this.player.health = Math.max(0, this.player.health - damageTaken);
     removeWhere(this.projectiles, (shot) => hitShots.has(shot.id) || distanceSquared(shot.position, playerWorld) > 150 * 150);
     removeWhere(this.enemies, (enemy) => killedEnemies.has(enemy.id) || enemy.railDistance < this.railDistance - ENEMY_CLEANUP_MARGIN || distanceSquared(enemy.position, playerWorld) > 260 * 260);
-    removeWhere(this.islands, (island) => island.railDistance < this.railDistance - CLEANUP_MARGIN);
     result.enemyHits = damagedEnemies.size;
     result.kills = killedEnemies.size;
     result.scoreDelta = (killedEnemies.size - (result.bossDefeated ? 1 : 0)) * 100 + (result.bossDefeated ? 2500 : 0);
@@ -117,17 +117,7 @@ export class FlightSimulation {
     return result;
   }
 
-  private streamWorld() {
-    while (this.nextIslandDistance <= this.railDistance + STREAM_AHEAD) {
-      const seed = hash(this.nextIslandDistance / ISLAND_SPACING);
-      const side = seed % 2 === 0 ? -1 : 1;
-      const offset = side * (23 + (seed % 17));
-      const size = { x: 8 + seed % 12, y: 5 + (seed % 12), z: 10 + (seed >>> 4) % 17 };
-      const position = railOffsetPosition(this.nextIslandDistance, offset, size.y / 2 - 0.35);
-      this.islands.push({ id: this.nextId++, position, size, rotation: (seed % 31) * 0.07, railDistance: this.nextIslandDistance });
-      this.nextIslandDistance += ISLAND_SPACING;
-    }
-
+  private streamCombat() {
     while (this.spawnedWaves < 2 && this.waveDistance(this.spawnedWaves) <= this.railDistance + STREAM_AHEAD) {
       this.spawnEnemyGroup(this.spawnedWaves, this.waveDistance(this.spawnedWaves));
       this.spawnedWaves++;
@@ -225,12 +215,6 @@ export class FlightSimulation {
       radius: enemy.kind === 'boss' ? 0.34 : 0.26, owner: 'enemy', damage: this.difficultyMultiplier,
     });
   }
-}
-
-function hash(value: number) {
-  let result = Math.imul(Math.floor(value) + 1, 0x45d9f3b);
-  result = Math.imul(result ^ result >>> 16, 0x45d9f3b);
-  return (result ^ result >>> 16) >>> 0;
 }
 
 function distanceSquared(a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }) {

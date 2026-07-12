@@ -1,6 +1,7 @@
 import './style.css';
 import { InputState } from './input/inputState';
 import { LEVELS, type LevelId } from './levels';
+import { createWorld } from './world/worldSystem';
 import { FlightSimulation } from './sim/flightSimulation';
 import { GameView } from './view/gameView';
 
@@ -90,10 +91,11 @@ app.innerHTML = `
     <div class="hud__fps" id="fps" hidden>FPS 0</div>
   </div>`;
 
-let simulation = new FlightSimulation();
+const initialWorld = createWorld(LEVELS[1].systems);
+let simulation = new FlightSimulation({ world: initialWorld });
 const input = new InputState();
 let currentLevelNumber = 1;
-let view = new GameView(appRoot, LEVELS[1]);
+let view = new GameView(appRoot, LEVELS[1], initialWorld);
 const score = document.querySelector<HTMLSpanElement>('#score');
 const health = requiredElement<HTMLSpanElement>('#health');
 const healthFill = requiredElement<HTMLDivElement>('#health-fill');
@@ -154,9 +156,11 @@ function styleForLevel(levelNumber: number): LevelId {
 
 function startGame(levelNumber = 1, carry?: { health: number; score: number }) {
   currentLevelNumber = levelNumber;
+  const level = LEVELS[styleForLevel(currentLevelNumber)];
+  const world = createWorld(level.systems);
   view.dispose();
-  simulation = new FlightSimulation({ ...carry, level: currentLevelNumber });
-  view = new GameView(appRoot, LEVELS[styleForLevel(currentLevelNumber)]);
+  simulation = new FlightSimulation({ ...carry, level: currentLevelNumber, world });
+  view = new GameView(appRoot, level, world);
   view.setRenderScale(Number(renderScaleSelect.value));
   view.setAntiAliasing(antiAliasingInput.checked);
   applyDevSettings();

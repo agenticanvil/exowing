@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { FlightSimulation } from './flightSimulation';
 import { railOffsetPosition, SECTION_LENGTH, SECTION_SPAN } from './railSystem';
 import type { EnemyState } from './types';
+import { islandField, IslandSystem } from '../world/islandSystem';
+import { createWorld } from '../world/worldSystem';
+
+const islandWorld = () => createWorld([islandField({ style: 'weathered', color: 0x8b714d })]);
 
 describe('FlightSimulation', () => {
   it('moves deterministically and keeps the player inside the flight window', () => {
@@ -19,7 +23,7 @@ describe('FlightSimulation', () => {
   });
 
   it('removes a sphere enemy hit by a straight projectile', () => {
-    const sim = new FlightSimulation();
+    const sim = new FlightSimulation({ world: islandWorld() });
     sim.enemies.length = 0;
     sim.enemies.push({ id: 999, position: railOffsetPosition(40, 0, 4), radius: 1.25, railDistance: 40, offsetX: 0, offsetY: 4, phase: 0, sectionIndex: 0, controller: 'formation' });
     for (let i = 0; i < 90; i++) sim.step({ steerX: 0, steerY: 0, fire: i === 0, pace: 0 }, 1 / 60);
@@ -45,11 +49,18 @@ describe('FlightSimulation', () => {
   });
 
   it('streams scenery with a bounded live set during long flights', () => {
-    const sim = new FlightSimulation();
+    const sim = new FlightSimulation({ world: islandWorld() });
     for (let i = 0; i < 60 * 100; i++) sim.step({ steerX: 0, steerY: 0, fire: false, pace: 1 }, 1 / 60);
     expect(sim.railDistance).toBeGreaterThan(SECTION_LENGTH * 5);
-    expect(sim.islands.length).toBeGreaterThan(3);
-    expect(sim.islands.length).toBeLessThan(10);
+    const islands = sim.world.get<IslandSystem>('islands')!.islands;
+    expect(islands.length).toBeGreaterThan(3);
+    expect(islands.length).toBeLessThan(10);
+  });
+
+  it('does not stream islands when the level has no island scenery system', () => {
+    const sim = new FlightSimulation({ world: createWorld([]) });
+    for (let i = 0; i < 60 * 20; i++) sim.step({ steerX: 0, steerY: 0, fire: false, pace: 1 }, 1 / 60);
+    expect(sim.world.get('islands')).toBeUndefined();
   });
 
   it('moves formations along the rail and scatters survivors near the section end', () => {

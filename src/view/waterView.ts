@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import type { LevelDefinition } from '../levels';
-import type { IslandState } from '../sim/types';
+import type { WaterSurfaceOptions } from '../world/waterSystem';
+import type { WaterObstacle } from '../world/worldSystem';
 
 const WATER_SIZE = 360;
 const WATER_SEGMENTS = 224;
@@ -9,8 +9,7 @@ const MAX_FOAM_ISLANDS = 8;
 export class WaterView {
   readonly mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
 
-  constructor(level: LevelDefinition) {
-    const environment = level.environment;
+  constructor(surface: WaterSurfaceOptions, sunDirection: readonly [number, number, number]) {
     const geometry = new THREE.PlaneGeometry(WATER_SIZE, WATER_SIZE, WATER_SEGMENTS, WATER_SEGMENTS);
     geometry.rotateX(-Math.PI / 2);
     const material = new THREE.ShaderMaterial({
@@ -20,11 +19,11 @@ export class WaterView {
       uniforms: {
         ...THREE.UniformsLib.fog,
         uTime: { value: 0 },
-        uSunDirection: { value: new THREE.Vector3(...environment.sunDirection).normalize() },
-        uDeepColor: { value: new THREE.Color(environment.waterDeep) },
-        uFaceColor: { value: new THREE.Color(environment.waterFace) },
-        uHorizonColor: { value: new THREE.Color(environment.waterHorizon) },
-        uFoamColor: { value: new THREE.Color(environment.foam) },
+        uSunDirection: { value: new THREE.Vector3(...sunDirection).normalize() },
+        uDeepColor: { value: new THREE.Color(surface.deep) },
+        uFaceColor: { value: new THREE.Color(surface.face) },
+        uHorizonColor: { value: new THREE.Color(surface.horizon) },
+        uFoamColor: { value: new THREE.Color(surface.foam) },
         uIslandCount: { value: 0 },
         uIslands: { value: Array.from({ length: MAX_FOAM_ISLANDS }, () => new THREE.Vector4()) },
         uIslandRotations: { value: Array.from({ length: MAX_FOAM_ISLANDS }, () => new THREE.Vector2()) },
@@ -36,18 +35,17 @@ export class WaterView {
     this.mesh.frustumCulled = false;
   }
 
-  update(centerX: number, centerZ: number, time: number, islands: IslandState[]) {
+  update(centerX: number, centerZ: number, time: number, obstacles: readonly WaterObstacle[]) {
     this.mesh.position.set(centerX, 0, centerZ);
     this.mesh.material.uniforms.uTime.value = time;
-    const count = Math.min(islands.length, MAX_FOAM_ISLANDS);
+    const count = Math.min(obstacles.length, MAX_FOAM_ISLANDS);
     this.mesh.material.uniforms.uIslandCount.value = count;
     const islandUniforms = this.mesh.material.uniforms.uIslands.value as THREE.Vector4[];
     const rotationUniforms = this.mesh.material.uniforms.uIslandRotations.value as THREE.Vector2[];
     for (let index = 0; index < count; index++) {
-      const island = islands[index];
-      // The generated rock is roughly 1.08 units wide at the waterline.
-      islandUniforms[index].set(island.position.x, island.position.z, island.size.x * 1.08, island.size.z * 1.08);
-      rotationUniforms[index].set(Math.cos(island.rotation), Math.sin(island.rotation));
+      const obstacle = obstacles[index];
+      islandUniforms[index].set(obstacle.x, obstacle.z, obstacle.radiusX, obstacle.radiusZ);
+      rotationUniforms[index].set(Math.cos(obstacle.rotation), Math.sin(obstacle.rotation));
     }
   }
 }

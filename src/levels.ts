@@ -1,31 +1,14 @@
+import { islandField } from './world/islandSystem';
+import { oceanSurface } from './world/waterSystem';
+import type { LevelEnvironment, WorldSystemDefinition } from './world/worldSystem';
+
 export type LevelId = 1 | 2;
-export type IslandStyle = 'weathered' | 'spires';
 
 export type LevelDefinition = {
   id: LevelId;
   name: string;
-  environment: {
-    horizon: number;
-    zenith: number;
-    upperSky: number;
-    sunset: number;
-    sunDirection: readonly [number, number, number];
-    sunColor: number;
-    sunIntensity: number;
-    hemisphereSky: number;
-    hemisphereGround: number;
-    hemisphereIntensity: number;
-    skySunIntensity: number;
-    exposure: number;
-    waterDeep: number;
-    waterFace: number;
-    waterHorizon: number;
-    foam: number;
-  };
-  islands: {
-    style: IslandStyle;
-    color: number;
-  };
+  environment: LevelEnvironment;
+  systems: readonly WorldSystemDefinition[];
 };
 
 export const LEVELS: Record<LevelId, LevelDefinition> = {
@@ -45,12 +28,11 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
       hemisphereIntensity: 2.5,
       skySunIntensity: 1,
       exposure: 1,
-      waterDeep: 0x052e60,
-      waterFace: 0x047599,
-      waterHorizon: 0x1a9eb8,
-      foam: 0xe5fcf7,
     },
-    islands: { style: 'weathered', color: 0x8b714d },
+    systems: [
+      oceanSurface({ deep: 0x052e60, face: 0x047599, horizon: 0x1a9eb8, foam: 0xe5fcf7 }),
+      islandField({ style: 'weathered', color: 0x8b714d }),
+    ],
   },
   2: {
     id: 2,
@@ -68,11 +50,10 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
       hemisphereIntensity: 1.25,
       skySunIntensity: 0.2,
       exposure: 0.72,
-      waterDeep: 0x020d18,
-      waterFace: 0x0a2c3b,
-      waterHorizon: 0x174753,
-      foam: 0x78c5c7,
     },
-    islands: { style: 'spires', color: 0x172329 },
+    systems: [
+      oceanSurface({ deep: 0x020d18, face: 0x0a2c3b, horizon: 0x174753, foam: 0x78c5c7 }),
+      islandField({ style: 'spires', color: 0x172329 }),
+    ],
   },
 };
