@@ -1,29 +1,45 @@
-import type { PlayerCommand } from '../sim/types';
+import type { PlayerCommand } from "../sim/types";
 
 export class InputState {
   private readonly pressed = new Set<string>();
   private pendingRoll = 0;
 
-  constructor(private readonly target: Pick<Window, 'addEventListener' | 'removeEventListener'> = window) {
-    target.addEventListener('keydown', this.onKeyDown as unknown as EventListener);
-    target.addEventListener('keyup', this.onKeyUp as unknown as EventListener);
-    target.addEventListener('blur', this.clear);
+  constructor(
+    private readonly target: Pick<
+      Window,
+      "addEventListener" | "removeEventListener"
+    > = window,
+  ) {
+    target.addEventListener(
+      "keydown",
+      this.onKeyDown as unknown as EventListener,
+    );
+    target.addEventListener("keyup", this.onKeyUp as unknown as EventListener);
+    target.addEventListener("blur", this.clear);
   }
 
   dispose() {
-    this.target.removeEventListener('keydown', this.onKeyDown as unknown as EventListener);
-    this.target.removeEventListener('keyup', this.onKeyUp as unknown as EventListener);
-    this.target.removeEventListener('blur', this.clear);
+    this.target.removeEventListener(
+      "keydown",
+      this.onKeyDown as unknown as EventListener,
+    );
+    this.target.removeEventListener(
+      "keyup",
+      this.onKeyUp as unknown as EventListener,
+    );
+    this.target.removeEventListener("blur", this.clear);
     this.clear();
   }
 
   command(): PlayerCommand {
     const command = {
-      steerX: axis(this.pressed.has('KeyA'), this.pressed.has('KeyD')),
-      steerY: axis(this.pressed.has('KeyS'), this.pressed.has('KeyW')),
-      fire: this.pressed.has('Space'),
-      pace: axis(this.pressed.has('AltLeft') || this.pressed.has('AltRight'),
-        this.pressed.has('ShiftLeft') || this.pressed.has('ShiftRight')),
+      steerX: axis(this.pressed.has("KeyA"), this.pressed.has("KeyD")),
+      steerY: axis(this.pressed.has("KeyS"), this.pressed.has("KeyW")),
+      fire: this.pressed.has("Space"),
+      pace: axis(
+        this.pressed.has("AltLeft") || this.pressed.has("AltRight"),
+        this.pressed.has("ShiftLeft") || this.pressed.has("ShiftRight"),
+      ),
       roll: this.pendingRoll,
     };
     this.pendingRoll = 0;
@@ -31,9 +47,10 @@ export class InputState {
   }
 
   private onKeyDown = (event: KeyboardEvent) => {
-    if (event.code === 'Space' || event.code.startsWith('Alt')) event.preventDefault();
-    if (!event.repeat && (event.code === 'KeyQ' || event.code === 'KeyE')) {
-      this.pendingRoll = event.code === 'KeyQ' ? -1 : 1;
+    if (event.code === "Space" || event.code.startsWith("Alt"))
+      event.preventDefault();
+    if (!event.repeat && (event.code === "KeyQ" || event.code === "KeyE")) {
+      this.pendingRoll = event.code === "KeyQ" ? -1 : 1;
     }
     this.pressed.add(event.code);
   };

@@ -18,7 +18,7 @@ export type PlayerState = {
   rollProgress: number;
 };
 
-export type EnemyControllerId = 'standard' | 'formation' | 'boss';
+export type EnemyControllerId = "standard" | "formation" | "boss";
 export type EnemyControllerState = {
   decisionCooldown: number;
   fireCooldown: number;
@@ -36,7 +36,7 @@ export type EnemyState = {
   offsetY: number;
   phase: number;
   sectionIndex: number;
-  kind?: 'standard' | 'boss';
+  kind?: "standard" | "boss";
   health?: number;
   maxHealth?: number;
   exitRailDistance?: number;
@@ -44,8 +44,21 @@ export type EnemyState = {
   controllerState?: EnemyControllerState;
   scatterVelocity?: Vec3;
 };
-export type ProjectileState = { id: number; position: Vec3; velocity: Vec3; radius: number; owner: 'player' | 'enemy'; damage?: number };
-export type IslandState = { id: number; position: Vec3; size: Vec3; rotation: number; railDistance: number };
+export type ProjectileState = {
+  id: number;
+  position: Vec3;
+  velocity: Vec3;
+  radius: number;
+  owner: "player" | "enemy";
+  damage?: number;
+};
+export type IslandState = {
+  id: number;
+  position: Vec3;
+  size: Vec3;
+  rotation: number;
+  railDistance: number;
+};
 
 export type FlightStepResult = {
   shotsFired: number;

@@ -1,5 +1,10 @@
-import type { WorldAttachContext, WorldRenderContext, WorldSystem, WorldSystemDefinition } from './worldSystem';
-import { WaterView } from '../view/waterView';
+import type {
+  WorldAttachContext,
+  WorldRenderContext,
+  WorldSystem,
+  WorldSystemDefinition,
+} from "./worldSystem";
+import { WaterView } from "../view/waterView";
 
 export type WaterSurfaceOptions = {
   deep: number;
@@ -9,7 +14,7 @@ export type WaterSurfaceOptions = {
 };
 
 class WaterSystem implements WorldSystem {
-  readonly id = 'water';
+  readonly id = "water";
   private view?: WaterView;
 
   constructor(private readonly options: WaterSurfaceOptions) {}
@@ -28,6 +33,8 @@ class WaterSystem implements WorldSystem {
   }
 }
 
-export function oceanSurface(options: WaterSurfaceOptions): WorldSystemDefinition {
+export function oceanSurface(
+  options: WaterSurfaceOptions,
+): WorldSystemDefinition {
   return { create: () => new WaterSystem(options) };
 }

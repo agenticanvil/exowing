@@ -1,6 +1,10 @@
-import * as THREE from 'three';
-import type { WaterSurfaceOptions } from '../world/waterSystem';
-import { GROUND_SURFACE_Y, type LevelEnvironment, type WaterObstacle } from '../world/worldSystem';
+import * as THREE from "three";
+import type { WaterSurfaceOptions } from "../world/waterSystem";
+import {
+  GROUND_SURFACE_Y,
+  type LevelEnvironment,
+  type WaterObstacle,
+} from "../world/worldSystem";
 
 const WATER_SIZE = 360;
 const WATER_SEGMENTS = 224;
@@ -10,7 +14,12 @@ export class WaterView {
   readonly mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
 
   constructor(surface: WaterSurfaceOptions, environment: LevelEnvironment) {
-    const geometry = new THREE.PlaneGeometry(WATER_SIZE, WATER_SIZE, WATER_SEGMENTS, WATER_SEGMENTS);
+    const geometry = new THREE.PlaneGeometry(
+      WATER_SIZE,
+      WATER_SIZE,
+      WATER_SEGMENTS,
+      WATER_SEGMENTS,
+    );
     geometry.rotateX(-Math.PI / 2);
     const material = new THREE.ShaderMaterial({
       fog: true,
@@ -19,7 +28,9 @@ export class WaterView {
       uniforms: {
         ...THREE.UniformsLib.fog,
         uTime: { value: 0 },
-        uSunDirection: { value: new THREE.Vector3(...environment.sunDirection).normalize() },
+        uSunDirection: {
+          value: new THREE.Vector3(...environment.sunDirection).normalize(),
+        },
         uDeepColor: { value: new THREE.Color(surface.deep) },
         uFaceColor: { value: new THREE.Color(surface.face) },
         uHorizonColor: { value: new THREE.Color(surface.horizon) },
@@ -30,8 +41,18 @@ export class WaterView {
         uSkySunsetColor: { value: new THREE.Color(environment.sunset) },
         uSkySunIntensity: { value: environment.skySunIntensity },
         uIslandCount: { value: 0 },
-        uIslands: { value: Array.from({ length: MAX_FOAM_ISLANDS }, () => new THREE.Vector4()) },
-        uIslandRotations: { value: Array.from({ length: MAX_FOAM_ISLANDS }, () => new THREE.Vector2()) },
+        uIslands: {
+          value: Array.from(
+            { length: MAX_FOAM_ISLANDS },
+            () => new THREE.Vector4(),
+          ),
+        },
+        uIslandRotations: {
+          value: Array.from(
+            { length: MAX_FOAM_ISLANDS },
+            () => new THREE.Vector2(),
+          ),
+        },
       },
       vertexShader: waterVertexShader,
       fragmentShader: waterFragmentShader,
@@ -40,17 +61,32 @@ export class WaterView {
     this.mesh.frustumCulled = false;
   }
 
-  update(centerX: number, centerZ: number, time: number, obstacles: readonly WaterObstacle[]) {
+  update(
+    centerX: number,
+    centerZ: number,
+    time: number,
+    obstacles: readonly WaterObstacle[],
+  ) {
     this.mesh.position.set(centerX, GROUND_SURFACE_Y, centerZ);
     this.mesh.material.uniforms.uTime.value = time;
     const count = Math.min(obstacles.length, MAX_FOAM_ISLANDS);
     this.mesh.material.uniforms.uIslandCount.value = count;
-    const islandUniforms = this.mesh.material.uniforms.uIslands.value as THREE.Vector4[];
-    const rotationUniforms = this.mesh.material.uniforms.uIslandRotations.value as THREE.Vector2[];
+    const islandUniforms = this.mesh.material.uniforms.uIslands
+      .value as THREE.Vector4[];
+    const rotationUniforms = this.mesh.material.uniforms.uIslandRotations
+      .value as THREE.Vector2[];
     for (let index = 0; index < count; index++) {
       const obstacle = obstacles[index];
-      islandUniforms[index].set(obstacle.x, obstacle.z, obstacle.radiusX, obstacle.radiusZ);
-      rotationUniforms[index].set(Math.cos(obstacle.rotation), Math.sin(obstacle.rotation));
+      islandUniforms[index].set(
+        obstacle.x,
+        obstacle.z,
+        obstacle.radiusX,
+        obstacle.radiusZ,
+      );
+      rotationUniforms[index].set(
+        Math.cos(obstacle.rotation),
+        Math.sin(obstacle.rotation),
+      );
     }
   }
 }

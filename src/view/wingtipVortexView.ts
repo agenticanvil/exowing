@@ -1,6 +1,6 @@
-import * as THREE from 'three';
+import * as THREE from "three";
 
-const SOCKET_NAMES = ['socketwingtipvortexleft', 'socketwingtipvortexright'];
+const SOCKET_NAMES = ["socketwingtipvortexleft", "socketwingtipvortexright"];
 const MAX_POINTS = 72;
 const RADIAL_SEGMENTS = 6;
 const MIN_SAMPLE_DISTANCE = 0.08;
@@ -17,7 +17,10 @@ export class WingtipVortexView {
     for (const name of SOCKET_NAMES) {
       const socket = sockets.get(name);
       if (!socket) continue;
-      const trail = new VortexTrail(socket, name.includes('left') ? 0 : Math.PI);
+      const trail = new VortexTrail(
+        socket,
+        name.includes("left") ? 0 : Math.PI,
+      );
       this.trails.push(trail);
       scene.add(trail.mesh);
     }
@@ -46,11 +49,17 @@ export class TrailHistory {
 
   push(point: THREE.Vector3) {
     const latest = this.points[this.points.length - 1];
-    if (latest && latest.distanceTo(point) > TELEPORT_DISTANCE) this.points.length = 0;
-    else if (latest && latest.distanceToSquared(point) < this.minDistance ** 2) return false;
+    if (latest && latest.distanceTo(point) > TELEPORT_DISTANCE)
+      this.points.length = 0;
+    else if (latest && latest.distanceToSquared(point) < this.minDistance ** 2)
+      return false;
     this.points.push(point.clone());
     if (this.points.length > this.capacity) this.points.shift();
-    while (this.points.length > 1 && this.points[0].distanceTo(point) > this.maxLength) this.points.shift();
+    while (
+      this.points.length > 1 &&
+      this.points[0].distanceTo(point) > this.maxLength
+    )
+      this.points.shift();
     return true;
   }
 }
@@ -63,10 +72,17 @@ class VortexTrail {
   private readonly lifeAttribute: THREE.BufferAttribute;
   private readonly material: THREE.ShaderMaterial;
 
-  constructor(private readonly socket: THREE.Object3D, phase: number) {
+  constructor(
+    private readonly socket: THREE.Object3D,
+    phase: number,
+  ) {
     const geometry = createTrailGeometry();
-    this.positionAttribute = geometry.getAttribute('position') as THREE.BufferAttribute;
-    this.lifeAttribute = geometry.getAttribute('aLife') as THREE.BufferAttribute;
+    this.positionAttribute = geometry.getAttribute(
+      "position",
+    ) as THREE.BufferAttribute;
+    this.lifeAttribute = geometry.getAttribute(
+      "aLife",
+    ) as THREE.BufferAttribute;
     this.material = createVortexMaterial(phase);
     this.mesh = new THREE.Mesh(geometry, this.material);
     this.mesh.frustumCulled = false;
@@ -108,35 +124,57 @@ class VortexTrail {
       const radius = 0.012 + Math.sin(progress * Math.PI) * 0.025;
 
       for (let side = 0; side < RADIAL_SEGMENTS; side++) {
-        const angle = side / RADIAL_SEGMENTS * Math.PI * 2;
+        const angle = (side / RADIAL_SEGMENTS) * Math.PI * 2;
         const vertex = index * RADIAL_SEGMENTS + side;
         const offset = vertex * 3;
-        position[offset] = points[index].x + (normal.x * Math.cos(angle) + binormal.x * Math.sin(angle)) * radius;
-        position[offset + 1] = points[index].y + (normal.y * Math.cos(angle) + binormal.y * Math.sin(angle)) * radius;
-        position[offset + 2] = points[index].z + (normal.z * Math.cos(angle) + binormal.z * Math.sin(angle)) * radius;
+        position[offset] =
+          points[index].x +
+          (normal.x * Math.cos(angle) + binormal.x * Math.sin(angle)) * radius;
+        position[offset + 1] =
+          points[index].y +
+          (normal.y * Math.cos(angle) + binormal.y * Math.sin(angle)) * radius;
+        position[offset + 2] =
+          points[index].z +
+          (normal.z * Math.cos(angle) + binormal.z * Math.sin(angle)) * radius;
         life[vertex] = progress;
       }
     }
     this.positionAttribute.needsUpdate = true;
     this.lifeAttribute.needsUpdate = true;
-    this.mesh.geometry.setDrawRange(0, Math.max(0, points.length - 1) * RADIAL_SEGMENTS * 6);
+    this.mesh.geometry.setDrawRange(
+      0,
+      Math.max(0, points.length - 1) * RADIAL_SEGMENTS * 6,
+    );
     this.mesh.geometry.computeBoundingSphere();
   }
 }
 
 function createTrailGeometry() {
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX_POINTS * RADIAL_SEGMENTS * 3), 3));
-  geometry.setAttribute('aLife', new THREE.BufferAttribute(new Float32Array(MAX_POINTS * RADIAL_SEGMENTS), 1));
+  geometry.setAttribute(
+    "position",
+    new THREE.BufferAttribute(
+      new Float32Array(MAX_POINTS * RADIAL_SEGMENTS * 3),
+      3,
+    ),
+  );
+  geometry.setAttribute(
+    "aLife",
+    new THREE.BufferAttribute(
+      new Float32Array(MAX_POINTS * RADIAL_SEGMENTS),
+      1,
+    ),
+  );
   const indices: number[] = [];
-  for (let ring = 0; ring < MAX_POINTS - 1; ring++) for (let side = 0; side < RADIAL_SEGMENTS; side++) {
-    const nextSide = (side + 1) % RADIAL_SEGMENTS;
-    const a = ring * RADIAL_SEGMENTS + side;
-    const b = ring * RADIAL_SEGMENTS + nextSide;
-    const c = (ring + 1) * RADIAL_SEGMENTS + side;
-    const d = (ring + 1) * RADIAL_SEGMENTS + nextSide;
-    indices.push(a, c, b, b, c, d);
-  }
+  for (let ring = 0; ring < MAX_POINTS - 1; ring++)
+    for (let side = 0; side < RADIAL_SEGMENTS; side++) {
+      const nextSide = (side + 1) % RADIAL_SEGMENTS;
+      const a = ring * RADIAL_SEGMENTS + side;
+      const b = ring * RADIAL_SEGMENTS + nextSide;
+      const c = (ring + 1) * RADIAL_SEGMENTS + side;
+      const d = (ring + 1) * RADIAL_SEGMENTS + nextSide;
+      indices.push(a, c, b, b, c, d);
+    }
   geometry.setIndex(indices);
   geometry.setDrawRange(0, 0);
   return geometry;
@@ -180,5 +218,5 @@ function createVortexMaterial(phase: number) {
 }
 
 function normalizeName(name: string) {
-  return name.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return name.toLowerCase().replace(/[^a-z0-9]/g, "");
 }

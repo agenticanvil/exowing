@@ -1,4 +1,4 @@
-import type { Vec3 } from './types';
+import type { Vec3 } from "./types";
 
 export const RAIL_SPEED = 15;
 export const SECTION_DURATION = 20;
@@ -23,7 +23,11 @@ export function railFrameAtDistance(distance: number): RailFrame {
   let heading = 0;
 
   for (let index = 0; index < sectionIndex; index++) {
-    ({ position, heading } = advanceSection(position, heading, bendDirectionForSection(index)));
+    ({ position, heading } = advanceSection(
+      position,
+      heading,
+      bendDirectionForSection(index),
+    ));
   }
 
   const localDistance = safeDistance - sectionIndex * SECTION_SPAN;
@@ -31,10 +35,19 @@ export function railFrameAtDistance(distance: number): RailFrame {
   position = advanceStraight(position, heading, straightDistance);
   if (localDistance <= SECTION_LENGTH) return frame(position, heading);
 
-  return arcFrame(position, heading, localDistance - SECTION_LENGTH, bendDirectionForSection(sectionIndex));
+  return arcFrame(
+    position,
+    heading,
+    localDistance - SECTION_LENGTH,
+    bendDirectionForSection(sectionIndex),
+  );
 }
 
-export function railOffsetPosition(distance: number, offsetX: number, offsetY: number): Vec3 {
+export function railOffsetPosition(
+  distance: number,
+  offsetX: number,
+  offsetY: number,
+): Vec3 {
   const rail = railFrameAtDistance(distance);
   return {
     x: rail.position.x + rail.right.x * offsetX,
@@ -57,7 +70,11 @@ function advanceSection(position: Vec3, heading: number, direction: -1 | 1) {
   return { position: end.position, heading: end.heading };
 }
 
-function advanceStraight(position: Vec3, heading: number, distance: number): Vec3 {
+function advanceStraight(
+  position: Vec3,
+  heading: number,
+  distance: number,
+): Vec3 {
   return {
     x: position.x - Math.sin(heading) * distance,
     y: 0,
@@ -65,9 +82,14 @@ function advanceStraight(position: Vec3, heading: number, distance: number): Vec
   };
 }
 
-function arcFrame(position: Vec3, heading: number, distance: number, direction: -1 | 1): RailFrame {
+function arcFrame(
+  position: Vec3,
+  heading: number,
+  distance: number,
+  direction: -1 | 1,
+): RailFrame {
   const radius = TURN_LENGTH / TURN_ANGLE;
-  const angle = Math.min(distance, TURN_LENGTH) / radius * direction;
+  const angle = (Math.min(distance, TURN_LENGTH) / radius) * direction;
   const nextHeading = heading + angle;
   const centerX = position.x - Math.cos(heading) * radius * direction;
   const centerZ = position.z - Math.sin(heading) * radius * direction;

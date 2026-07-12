@@ -1,15 +1,15 @@
-import './style.css';
-import { InputState } from './input/inputState';
-import { LEVEL_IDS, LEVELS, type LevelId } from './levels';
-import { createWorld } from './world/worldSystem';
-import { FlightSimulation } from './sim/flightSimulation';
-import { GameView } from './view/gameView';
-import { loadGameAssets, type AssetLoadProgress } from './assets/gameAssets';
-import { mountAppShell, requiredElement } from './ui/appShell';
-import { GameLifecycle } from './game/gameLifecycle';
+import "./style.css";
+import { InputState } from "./input/inputState";
+import { LEVEL_IDS, LEVELS, type LevelId } from "./levels";
+import { createWorld } from "./world/worldSystem";
+import { FlightSimulation } from "./sim/flightSimulation";
+import { GameView } from "./view/gameView";
+import { loadGameAssets, type AssetLoadProgress } from "./assets/gameAssets";
+import { mountAppShell, requiredElement } from "./ui/appShell";
+import { GameLifecycle } from "./game/gameLifecycle";
 
-const app = document.querySelector<HTMLDivElement>('#app');
-if (!app) throw new Error('Missing app root');
+const app = document.querySelector<HTMLDivElement>("#app");
+if (!app) throw new Error("Missing app root");
 const appRoot = app;
 
 /*
@@ -116,47 +116,53 @@ let simulation = new FlightSimulation({ world: initialWorld });
 const input = new InputState();
 let currentLevelNumber = 1;
 let view = new GameView(appRoot, LEVELS[1], initialWorld);
-const score = document.querySelector<HTMLSpanElement>('#score');
-const health = requiredElement<HTMLSpanElement>('#health');
-const healthFill = requiredElement<HTMLDivElement>('#health-fill');
-const healthTrack = requiredElement<HTMLDivElement>('.hud__health-track');
-const damageVignette = requiredElement<HTMLDivElement>('#damage-vignette');
-const levelTransition = requiredElement<HTMLDivElement>('#level-transition');
-const levelTransitionLabel = requiredElement<HTMLSpanElement>('#level-transition-label');
-const loadingScreen = requiredElement<HTMLDivElement>('#loading-screen');
-const loadingEyebrow = requiredElement<HTMLParagraphElement>('#loading-eyebrow');
-const loadingTitle = requiredElement<HTMLHeadingElement>('#loading-title');
-const loadingFill = requiredElement<HTMLDivElement>('#loading-fill');
-const loadingStatus = requiredElement<HTMLParagraphElement>('#loading-status');
-const loadingRetry = requiredElement<HTMLButtonElement>('#loading-retry');
-const gameOverMenu = requiredElement<HTMLDivElement>('#game-over-menu');
-const retryButton = requiredElement<HTMLButtonElement>('#retry-button');
-const gameOverMainMenuButton = requiredElement<HTMLButtonElement>('#game-over-main-menu-button');
-const bossHealth = requiredElement<HTMLDivElement>('#boss-health');
-const bossHealthValue = requiredElement<HTMLSpanElement>('#boss-health-value');
-const bossHealthFill = requiredElement<HTMLDivElement>('#boss-health-fill');
-const fps = requiredElement<HTMLDivElement>('#fps');
-const hud = requiredElement<HTMLDivElement>('#hud');
-const mainMenu = requiredElement<HTMLDivElement>('#main-menu');
-const pauseMenu = requiredElement<HTMLDivElement>('#pause-menu');
-const controlsMenu = requiredElement<HTMLDivElement>('#controls-menu');
-const settingsMenu = requiredElement<HTMLDivElement>('#settings-menu');
-const startButton = requiredElement<HTMLButtonElement>('#start-button');
-const continueButton = requiredElement<HTMLButtonElement>('#continue-button');
-const controlsButton = requiredElement<HTMLButtonElement>('#controls-button');
-const settingsButton = requiredElement<HTMLButtonElement>('#settings-button');
-const settingsBackButton = requiredElement<HTMLButtonElement>('#settings-back');
-const renderScaleSelect = requiredElement<HTMLSelectElement>('#render-scale');
-const renderResolution = requiredElement<HTMLElement>('#render-resolution');
-const antiAliasingInput = requiredElement<HTMLInputElement>('#anti-aliasing');
-const controlsBackButton = requiredElement<HTMLButtonElement>('#controls-back');
-const mainMenuButton = requiredElement<HTMLButtonElement>('#main-menu-button');
+const score = document.querySelector<HTMLSpanElement>("#score");
+const health = requiredElement<HTMLSpanElement>("#health");
+const healthFill = requiredElement<HTMLDivElement>("#health-fill");
+const healthTrack = requiredElement<HTMLDivElement>(".hud__health-track");
+const damageVignette = requiredElement<HTMLDivElement>("#damage-vignette");
+const levelTransition = requiredElement<HTMLDivElement>("#level-transition");
+const levelTransitionLabel = requiredElement<HTMLSpanElement>(
+  "#level-transition-label",
+);
+const loadingScreen = requiredElement<HTMLDivElement>("#loading-screen");
+const loadingEyebrow =
+  requiredElement<HTMLParagraphElement>("#loading-eyebrow");
+const loadingTitle = requiredElement<HTMLHeadingElement>("#loading-title");
+const loadingFill = requiredElement<HTMLDivElement>("#loading-fill");
+const loadingStatus = requiredElement<HTMLParagraphElement>("#loading-status");
+const loadingRetry = requiredElement<HTMLButtonElement>("#loading-retry");
+const gameOverMenu = requiredElement<HTMLDivElement>("#game-over-menu");
+const retryButton = requiredElement<HTMLButtonElement>("#retry-button");
+const gameOverMainMenuButton = requiredElement<HTMLButtonElement>(
+  "#game-over-main-menu-button",
+);
+const bossHealth = requiredElement<HTMLDivElement>("#boss-health");
+const bossHealthValue = requiredElement<HTMLSpanElement>("#boss-health-value");
+const bossHealthFill = requiredElement<HTMLDivElement>("#boss-health-fill");
+const fps = requiredElement<HTMLDivElement>("#fps");
+const hud = requiredElement<HTMLDivElement>("#hud");
+const mainMenu = requiredElement<HTMLDivElement>("#main-menu");
+const pauseMenu = requiredElement<HTMLDivElement>("#pause-menu");
+const controlsMenu = requiredElement<HTMLDivElement>("#controls-menu");
+const settingsMenu = requiredElement<HTMLDivElement>("#settings-menu");
+const startButton = requiredElement<HTMLButtonElement>("#start-button");
+const continueButton = requiredElement<HTMLButtonElement>("#continue-button");
+const controlsButton = requiredElement<HTMLButtonElement>("#controls-button");
+const settingsButton = requiredElement<HTMLButtonElement>("#settings-button");
+const settingsBackButton = requiredElement<HTMLButtonElement>("#settings-back");
+const renderScaleSelect = requiredElement<HTMLSelectElement>("#render-scale");
+const renderResolution = requiredElement<HTMLElement>("#render-resolution");
+const antiAliasingInput = requiredElement<HTMLInputElement>("#anti-aliasing");
+const controlsBackButton = requiredElement<HTMLButtonElement>("#controls-back");
+const mainMenuButton = requiredElement<HTMLButtonElement>("#main-menu-button");
 const fixedDt = 1 / 60;
 let previous = performance.now();
 let accumulator = 0;
 const lifecycle = new GameLifecycle();
 let closeDevSettings: (() => void) | null = null;
-type DevSettingName = 'invulnerable' | 'showFps' | 'showMovementFrame' | 'showSpline';
+type DevSettingName =
+  "invulnerable" | "showFps" | "showMovementFrame" | "showSpline";
 type DevSettings = Record<DevSettingName, boolean>;
 const devSettings: DevSettings = {
   invulnerable: false,
@@ -171,17 +177,25 @@ let retryLoad: (() => void) | null = null;
 
 function applyDevSettings() {
   fps.hidden = !devSettings.showFps;
-  view.setDebugVisibility(devSettings.showMovementFrame, devSettings.showSpline);
-  document.querySelectorAll<HTMLInputElement>('[data-dev-setting]').forEach((input) => {
-    input.checked = devSettings[input.dataset.devSetting as DevSettingName];
-  });
+  view.setDebugVisibility(
+    devSettings.showMovementFrame,
+    devSettings.showSpline,
+  );
+  document
+    .querySelectorAll<HTMLInputElement>("[data-dev-setting]")
+    .forEach((input) => {
+      input.checked = devSettings[input.dataset.devSetting as DevSettingName];
+    });
 }
 
 function styleForLevel(levelNumber: number): LevelId {
   return LEVEL_IDS[(levelNumber - 1) % LEVEL_IDS.length];
 }
 
-async function startGame(levelNumber = 1, carry?: { health: number; score: number }) {
+async function startGame(
+  levelNumber = 1,
+  carry?: { health: number; score: number },
+) {
   if (loading) return;
   loading = true;
   const isNewRun = !carry;
@@ -191,15 +205,19 @@ async function startGame(levelNumber = 1, carry?: { health: number; score: numbe
     const assets = await withTimeout(
       loadGameAssets(levelId, updateLoadingProgress),
       60_000,
-      'Timed out while loading level assets.',
+      "Timed out while loading level assets.",
     );
-    loadingStatus.textContent = 'Building world…';
+    loadingStatus.textContent = "Building world…";
     await nextPaint();
     currentLevelNumber = levelNumber;
     const level = LEVELS[levelId];
     const world = createWorld(level.systems);
     view.dispose();
-    simulation = new FlightSimulation({ ...carry, level: currentLevelNumber, world });
+    simulation = new FlightSimulation({
+      ...carry,
+      level: currentLevelNumber,
+      world,
+    });
     view = new GameView(appRoot, level, world, assets);
     view.setRenderScale(Number(renderScaleSelect.value));
     view.setAntiAliasing(antiAliasingInput.checked);
@@ -210,19 +228,24 @@ async function startGame(levelNumber = 1, carry?: { health: number; score: numbe
     controlsMenu.hidden = true;
     settingsMenu.hidden = true;
     gameOverMenu.hidden = true;
-    const devSettingsMenu = document.querySelector<HTMLDivElement>('#dev-settings-menu');
+    const devSettingsMenu =
+      document.querySelector<HTMLDivElement>("#dev-settings-menu");
     if (devSettingsMenu) devSettingsMenu.hidden = true;
     closeDevSettings = null;
     hud.hidden = false;
-    damageVignette.classList.remove('damage-vignette--active');
-    levelTransition.className = 'level-transition';
+    damageVignette.classList.remove("damage-vignette--active");
+    levelTransition.className = "level-transition";
     accumulator = 0;
     previous = performance.now();
     updateRenderResolution();
     hideLoading();
   } catch (error) {
-    showLoadingError(error instanceof Error ? error.message : 'Failed to load level assets.');
-    retryLoad = () => { void startGame(levelNumber, carry); };
+    showLoadingError(
+      error instanceof Error ? error.message : "Failed to load level assets.",
+    );
+    retryLoad = () => {
+      void startGame(levelNumber, carry);
+    };
   } finally {
     loading = false;
   }
@@ -277,18 +300,22 @@ function closeSettings() {
   settingsButton.focus();
 }
 
-startButton.addEventListener('click', () => { void startGame(1); });
-retryButton.addEventListener('click', () => { void startGame(1); });
-loadingRetry.addEventListener('click', () => retryLoad?.());
-gameOverMainMenuButton.addEventListener('click', returnToMainMenu);
-continueButton.addEventListener('click', continueGame);
-controlsButton.addEventListener('click', openControls);
-settingsButton.addEventListener('click', openSettings);
-settingsBackButton.addEventListener('click', closeSettings);
-controlsBackButton.addEventListener('click', closeControls);
-mainMenuButton.addEventListener('click', returnToMainMenu);
-window.addEventListener('keydown', (event) => {
-  if (event.code !== 'Escape' || event.repeat) return;
+startButton.addEventListener("click", () => {
+  void startGame(1);
+});
+retryButton.addEventListener("click", () => {
+  void startGame(1);
+});
+loadingRetry.addEventListener("click", () => retryLoad?.());
+gameOverMainMenuButton.addEventListener("click", returnToMainMenu);
+continueButton.addEventListener("click", continueGame);
+controlsButton.addEventListener("click", openControls);
+settingsButton.addEventListener("click", openSettings);
+settingsBackButton.addEventListener("click", closeSettings);
+controlsBackButton.addEventListener("click", closeControls);
+mainMenuButton.addEventListener("click", returnToMainMenu);
+window.addEventListener("keydown", (event) => {
+  if (event.code !== "Escape" || event.repeat) return;
   if (!controlsMenu.hidden) {
     closeControls();
     return;
@@ -297,39 +324,56 @@ window.addEventListener('keydown', (event) => {
     closeSettings();
     return;
   }
-  const devSettingsMenu = document.querySelector<HTMLDivElement>('#dev-settings-menu');
+  const devSettingsMenu =
+    document.querySelector<HTMLDivElement>("#dev-settings-menu");
   if (devSettingsMenu && !devSettingsMenu.hidden && closeDevSettings) {
     closeDevSettings();
     return;
   }
-  if (lifecycle.mode === 'playing') pauseGame();
-  else if (lifecycle.mode === 'paused') continueGame();
+  if (lifecycle.mode === "playing") pauseGame();
+  else if (lifecycle.mode === "paused") continueGame();
 });
 
-const storedRenderScale = Number(localStorage.getItem('exowing.renderScale'));
-const initialRenderScale = [0.5, 0.75, 1].includes(storedRenderScale) ? storedRenderScale : 1;
-const antiAliasingEnabled = localStorage.getItem('exowing.antiAliasing') !== 'false';
+const storedRenderScale = Number(localStorage.getItem("exowing.renderScale"));
+const initialRenderScale = [0.5, 0.75, 1].includes(storedRenderScale)
+  ? storedRenderScale
+  : 1;
+const antiAliasingEnabled =
+  localStorage.getItem("exowing.antiAliasing") !== "false";
 renderScaleSelect.value = initialRenderScale.toString();
 antiAliasingInput.checked = antiAliasingEnabled;
 view.setRenderScale(initialRenderScale);
 view.setAntiAliasing(antiAliasingEnabled);
 updateRenderResolution();
-renderScaleSelect.addEventListener('change', () => {
+renderScaleSelect.addEventListener("change", () => {
   const scale = Number(renderScaleSelect.value);
   view.setRenderScale(scale);
   updateRenderResolution();
-  try { localStorage.setItem('exowing.renderScale', scale.toString()); } catch { /* Persistence is optional. */ }
+  try {
+    localStorage.setItem("exowing.renderScale", scale.toString());
+  } catch {
+    /* Persistence is optional. */
+  }
 });
-antiAliasingInput.addEventListener('change', () => {
+antiAliasingInput.addEventListener("change", () => {
   view.setAntiAliasing(antiAliasingInput.checked);
-  try { localStorage.setItem('exowing.antiAliasing', antiAliasingInput.checked.toString()); } catch { /* Persistence is optional. */ }
+  try {
+    localStorage.setItem(
+      "exowing.antiAliasing",
+      antiAliasingInput.checked.toString(),
+    );
+  } catch {
+    /* Persistence is optional. */
+  }
 });
-window.addEventListener('resize', updateRenderResolution);
+window.addEventListener("resize", updateRenderResolution);
 
 if (import.meta.env.DEV) setupDevControls();
 
 // Test/development shortcut: ?play=3&dev=invulnerable
-const requestedLevel = levelFromQuery(new URLSearchParams(location.search).get('play'));
+const requestedLevel = levelFromQuery(
+  new URLSearchParams(location.search).get("play"),
+);
 if (requestedLevel) void startGame(requestedLevel);
 else startButton.focus();
 
@@ -337,7 +381,7 @@ function frame(now: number) {
   const frameDt = Math.min((now - previous) / 1000, 0.1);
   accumulator += frameDt;
   previous = now;
-  while (lifecycle.mode === 'playing' && accumulator >= fixedDt) {
+  while (lifecycle.mode === "playing" && accumulator >= fixedDt) {
     simulation.invulnerable = devSettings.invulnerable;
     const result = simulation.step(input.command(), fixedDt);
     if (result.playerHits > 0) flashDamageVignette();
@@ -345,17 +389,26 @@ function frame(now: number) {
     else if (result.bossDefeated) beginNextLevel();
     accumulator -= fixedDt;
   }
-  if (score) score.textContent = simulation.score.toString().padStart(4, '0');
-  const healthPercent = simulation.player.health / 5 * 100;
+  if (score) score.textContent = simulation.score.toString().padStart(4, "0");
+  const healthPercent = (simulation.player.health / 5) * 100;
   health.textContent = `${Math.round(healthPercent)}%`;
   healthFill.style.width = `${healthPercent}%`;
-  healthFill.classList.toggle('hud__health-fill--critical', simulation.player.health <= 2);
-  healthTrack.setAttribute('aria-valuenow', simulation.player.health.toString());
+  healthFill.classList.toggle(
+    "hud__health-fill--critical",
+    simulation.player.health <= 2,
+  );
+  healthTrack.setAttribute(
+    "aria-valuenow",
+    simulation.player.health.toString(),
+  );
   const boss = simulation.boss;
   const bossEngaged = boss && boss.railDistance - simulation.railDistance < 140;
   bossHealth.hidden = !bossEngaged;
   if (boss) {
-    const bossPercent = Math.max(0, (boss.health ?? 0) / (boss.maxHealth ?? 1) * 100);
+    const bossPercent = Math.max(
+      0,
+      ((boss.health ?? 0) / (boss.maxHealth ?? 1)) * 100,
+    );
     bossHealthValue.textContent = `${Math.ceil(bossPercent)}%`;
     bossHealthFill.style.width = `${bossPercent}%`;
   }
@@ -375,9 +428,9 @@ function frame(now: number) {
 requestAnimationFrame(frame);
 
 function flashDamageVignette() {
-  damageVignette.classList.remove('damage-vignette--active');
+  damageVignette.classList.remove("damage-vignette--active");
   void damageVignette.offsetWidth;
-  damageVignette.classList.add('damage-vignette--active');
+  damageVignette.classList.add("damage-vignette--active");
 }
 
 function showGameOver() {
@@ -392,7 +445,7 @@ function beginNextLevel() {
   const nextLevel = currentLevelNumber + 1;
   const carry = { health: simulation.player.health, score: simulation.score };
   levelTransitionLabel.textContent = `LEVEL ${nextLevel}`;
-  levelTransition.className = 'level-transition level-transition--active';
+  levelTransition.className = "level-transition level-transition--active";
   window.setTimeout(() => {
     void startGame(nextLevel, carry);
   }, 900);
@@ -401,11 +454,13 @@ function beginNextLevel() {
 function showLoading(levelNumber: number, isNewRun: boolean) {
   retryLoad = null;
   loadingScreen.hidden = false;
-  loadingScreen.classList.remove('loading-screen--error');
-  loadingEyebrow.textContent = isNewRun ? 'PREPARING SORTIE' : 'ENTERING NEW AIRSPACE';
+  loadingScreen.classList.remove("loading-screen--error");
+  loadingEyebrow.textContent = isNewRun
+    ? "PREPARING SORTIE"
+    : "ENTERING NEW AIRSPACE";
   loadingTitle.textContent = `LEVEL ${levelNumber}`;
-  loadingStatus.textContent = 'Preparing asset manifest…';
-  loadingFill.style.width = '0%';
+  loadingStatus.textContent = "Preparing asset manifest…";
+  loadingFill.style.width = "0%";
   loadingRetry.hidden = true;
   startButton.disabled = true;
   hud.hidden = true;
@@ -413,19 +468,19 @@ function showLoading(levelNumber: number, isNewRun: boolean) {
 
 function updateLoadingProgress(progress: AssetLoadProgress) {
   loadingStatus.textContent = progress.label;
-  loadingFill.style.width = `${progress.total ? progress.loaded / progress.total * 100 : 0}%`;
+  loadingFill.style.width = `${progress.total ? (progress.loaded / progress.total) * 100 : 0}%`;
 }
 
 function hideLoading() {
   loadingScreen.hidden = true;
-  levelTransition.className = 'level-transition';
+  levelTransition.className = "level-transition";
   startButton.disabled = false;
   retryLoad = null;
 }
 
 function showLoadingError(message: string) {
-  loadingScreen.classList.add('loading-screen--error');
-  loadingEyebrow.textContent = 'LOAD FAILED';
+  loadingScreen.classList.add("loading-screen--error");
+  loadingEyebrow.textContent = "LOAD FAILED";
   loadingStatus.textContent = message;
   loadingRetry.hidden = false;
   startButton.disabled = false;
@@ -435,7 +490,11 @@ function nextPaint(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
@@ -448,14 +507,21 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: s
 }
 
 function setupDevControls() {
-  const pauseSettingsButton = requiredElement<HTMLButtonElement>('#dev-settings-button');
-  const startSettingsButton = requiredElement<HTMLButtonElement>('#start-dev-settings-button');
-  const settingsMenu = requiredElement<HTMLDivElement>('#dev-settings-menu');
-  const backButton = requiredElement<HTMLButtonElement>('#dev-settings-back');
-  const levelToggle = requiredElement<HTMLButtonElement>('#dev-level-toggle');
-  const levelList = requiredElement<HTMLDivElement>('#dev-level-list');
+  const pauseSettingsButton = requiredElement<HTMLButtonElement>(
+    "#dev-settings-button",
+  );
+  const startSettingsButton = requiredElement<HTMLButtonElement>(
+    "#start-dev-settings-button",
+  );
+  const settingsMenu = requiredElement<HTMLDivElement>("#dev-settings-menu");
+  const backButton = requiredElement<HTMLButtonElement>("#dev-settings-back");
+  const levelToggle = requiredElement<HTMLButtonElement>("#dev-level-toggle");
+  const levelList = requiredElement<HTMLDivElement>("#dev-level-list");
 
-  function openSettings(sourceMenu: HTMLDivElement, sourceButton: HTMLButtonElement) {
+  function openSettings(
+    sourceMenu: HTMLDivElement,
+    sourceButton: HTMLButtonElement,
+  ) {
     sourceMenu.hidden = true;
     settingsMenu.hidden = false;
     backButton.focus();
@@ -467,33 +533,46 @@ function setupDevControls() {
     };
   }
 
-  pauseSettingsButton.addEventListener('click', () => openSettings(pauseMenu, pauseSettingsButton));
-  startSettingsButton.addEventListener('click', () => openSettings(mainMenu, startSettingsButton));
-  backButton.addEventListener('click', () => closeDevSettings?.());
-  levelToggle.addEventListener('click', () => {
+  pauseSettingsButton.addEventListener("click", () =>
+    openSettings(pauseMenu, pauseSettingsButton),
+  );
+  startSettingsButton.addEventListener("click", () =>
+    openSettings(mainMenu, startSettingsButton),
+  );
+  backButton.addEventListener("click", () => closeDevSettings?.());
+  levelToggle.addEventListener("click", () => {
     levelList.hidden = !levelList.hidden;
-    levelToggle.setAttribute('aria-expanded', (!levelList.hidden).toString());
+    levelToggle.setAttribute("aria-expanded", (!levelList.hidden).toString());
   });
-  levelList.querySelectorAll<HTMLButtonElement>('[data-dev-level]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const levelId = Number(button.dataset.devLevel) as LevelId;
-      levelList.hidden = true;
-      levelToggle.setAttribute('aria-expanded', 'false');
-      void startGame(levelId);
+  levelList
+    .querySelectorAll<HTMLButtonElement>("[data-dev-level]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        const levelId = Number(button.dataset.devLevel) as LevelId;
+        levelList.hidden = true;
+        levelToggle.setAttribute("aria-expanded", "false");
+        void startGame(levelId);
+      });
     });
-  });
-  document.querySelectorAll<HTMLInputElement>('[data-dev-setting]').forEach((input) => {
-    input.addEventListener('change', () => {
-      devSettings[input.dataset.devSetting as DevSettingName] = input.checked;
-      applyDevSettings();
+  document
+    .querySelectorAll<HTMLInputElement>("[data-dev-setting]")
+    .forEach((input) => {
+      input.addEventListener("change", () => {
+        devSettings[input.dataset.devSetting as DevSettingName] = input.checked;
+        applyDevSettings();
+      });
     });
-  });
 
   const aliases: Record<string, DevSettingName> = {
-    invulnerable: 'invulnerable', fps: 'showFps', frame: 'showMovementFrame', spline: 'showSpline',
+    invulnerable: "invulnerable",
+    fps: "showFps",
+    frame: "showMovementFrame",
+    spline: "showSpline",
   };
-  const requested = new URLSearchParams(location.search).get('dev')?.split(',') ?? [];
-  for (const alias of requested) if (aliases[alias]) devSettings[aliases[alias]] = true;
+  const requested =
+    new URLSearchParams(location.search).get("dev")?.split(",") ?? [];
+  for (const alias of requested)
+    if (aliases[alias]) devSettings[aliases[alias]] = true;
 
   window.exowingDev = {
     settings: devSettings,
@@ -524,6 +603,12 @@ function levelFromQuery(value: string | null): LevelId | null {
   if (!value) return null;
   const numeric = Number(value);
   if (LEVEL_IDS.includes(numeric as LevelId)) return numeric as LevelId;
-  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-  return LEVEL_IDS.find((id) => LEVELS[id].name.toLowerCase().replace(/[^a-z0-9]+/g, '-') === normalized) ?? null;
+  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  return (
+    LEVEL_IDS.find(
+      (id) =>
+        LEVELS[id].name.toLowerCase().replace(/[^a-z0-9]+/g, "-") ===
+        normalized,
+    ) ?? null
+  );
 }

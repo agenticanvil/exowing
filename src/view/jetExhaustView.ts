@@ -1,6 +1,10 @@
-import * as THREE from 'three';
+import * as THREE from "three";
 
-const SOCKET_NAMES = ['socketexhaustleft', 'socketexhaustcenter', 'socketexhaustright'];
+const SOCKET_NAMES = [
+  "socketexhaustleft",
+  "socketexhaustcenter",
+  "socketexhaustright",
+];
 const MIN_SPEED = 6;
 const MAX_SPEED = 25;
 
@@ -28,7 +32,10 @@ export class JetExhaustView {
     for (const name of SOCKET_NAMES) {
       const socket = sockets.get(name);
       if (!socket) continue;
-      const plume = createPlume(this.uniforms, name.includes('center') ? 1.08 : 0.9);
+      const plume = createPlume(
+        this.uniforms,
+        name.includes("center") ? 1.08 : 0.9,
+      );
       socket.add(plume);
       this.plumes.push(plume);
     }
@@ -45,7 +52,9 @@ export class JetExhaustView {
     this.uniforms.uTurbulence.value = response.turbulence;
 
     this.plumes.forEach((plume, index) => {
-      const flutter = Math.sin(this.elapsed * (17 + index * 1.7) + index * 2.1) * response.turbulence;
+      const flutter =
+        Math.sin(this.elapsed * (17 + index * 1.7) + index * 2.1) *
+        response.turbulence;
       plume.scale.z = response.length * (1 + flutter * 0.07);
       plume.scale.x = 1 + flutter * 0.035;
       plume.scale.y = 1 - flutter * 0.025;
@@ -55,7 +64,11 @@ export class JetExhaustView {
 }
 
 export function exhaustResponse(speed: number, acceleration: number) {
-  const pace = THREE.MathUtils.clamp((speed - MIN_SPEED) / (MAX_SPEED - MIN_SPEED), 0, 1);
+  const pace = THREE.MathUtils.clamp(
+    (speed - MIN_SPEED) / (MAX_SPEED - MIN_SPEED),
+    0,
+    1,
+  );
   const boost = THREE.MathUtils.clamp(acceleration / 14, 0, 1);
   const braking = THREE.MathUtils.clamp(-acceleration / 14, 0, 1);
   return {
@@ -100,8 +113,20 @@ function createPlume(uniforms: ExhaustUniforms, radiusScale: number) {
   return group;
 }
 
-function createTaperedTube(startRadius: number, endRadius: number, length: number, segments: number) {
-  const geometry = new THREE.CylinderGeometry(endRadius, startRadius, length, segments, 12, true);
+function createTaperedTube(
+  startRadius: number,
+  endRadius: number,
+  length: number,
+  segments: number,
+) {
+  const geometry = new THREE.CylinderGeometry(
+    endRadius,
+    startRadius,
+    length,
+    segments,
+    12,
+    true,
+  );
   geometry.rotateX(Math.PI / 2);
   geometry.translate(0, 0, length / 2);
   return geometry;
@@ -132,11 +157,11 @@ function createExhaustMaterial(uniforms: ExhaustUniforms, core: boolean) {
         float bands = sin(along * 38.0 - uTime * (18.0 + uPower * 12.0));
         float noise = hash(floor(vec2(vUv.x * 18.0, along * 34.0 - uTime * 13.0)));
         float breakup = smoothstep(.05, .8, 1.0 - along + (bands * .07 + noise * .1) * uTurbulence);
-        float alpha = edge * breakup * ${core ? '0.88' : '0.42'} * smoothstep(1.0, .72, along);
+        float alpha = edge * breakup * ${core ? "0.88" : "0.42"} * smoothstep(1.0, .72, along);
         vec3 hot = vec3(1.45, .78, 1.8);
         vec3 blue = vec3(.14, .72, 2.15);
         vec3 color = mix(hot, blue, smoothstep(.04, .72, along));
-        color *= (${core ? '1.7' : '1.05'} + vFacet * .22) * (.68 + uPower * .55);
+        color *= (${core ? "1.7" : "1.05"} + vFacet * .22) * (.68 + uPower * .55);
         gl_FragColor = vec4(color, alpha * (.72 + uPower * .28));
       }
     `,
@@ -149,5 +174,5 @@ function createExhaustMaterial(uniforms: ExhaustUniforms, core: boolean) {
 }
 
 function normalizeName(name: string) {
-  return name.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return name.toLowerCase().replace(/[^a-z0-9]/g, "");
 }

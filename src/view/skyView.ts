@@ -1,5 +1,5 @@
-import * as THREE from 'three';
-import type { LevelDefinition } from '../levels';
+import * as THREE from "three";
+import type { LevelDefinition } from "../levels";
 
 export class SkyView {
   readonly mesh: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
@@ -10,7 +10,9 @@ export class SkyView {
       side: THREE.BackSide,
       depthWrite: false,
       uniforms: {
-        uSunDirection: { value: new THREE.Vector3(...environment.sunDirection).normalize() },
+        uSunDirection: {
+          value: new THREE.Vector3(...environment.sunDirection).normalize(),
+        },
         uHorizonColor: { value: new THREE.Color(environment.horizon) },
         uZenithColor: { value: new THREE.Color(environment.zenith) },
         uUpperSkyColor: { value: new THREE.Color(environment.upperSky) },

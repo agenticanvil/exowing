@@ -1,4 +1,4 @@
-import type * as THREE from 'three';
+import type * as THREE from "three";
 
 // Shared baseline for non-obstacle ground surfaces and scenery rooted in them.
 // Keep gameplay flight coordinates unchanged and move the world surface instead.
