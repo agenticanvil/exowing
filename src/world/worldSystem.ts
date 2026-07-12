@@ -5,6 +5,7 @@ import type * as THREE from 'three';
 export const GROUND_SURFACE_Y = -2.5;
 
 export type LevelEnvironment = {
+  atmosphere: boolean;
   horizon: number;
   zenith: number;
   upperSky: number;

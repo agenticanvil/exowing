@@ -1,9 +1,10 @@
 import { islandField } from './world/islandSystem';
 import { oceanSurface } from './world/waterSystem';
 import { desertCanyon } from './world/desertCanyonSystem';
+import { asteroidBelt } from './world/asteroidBeltSystem';
 import type { LevelEnvironment, WorldSystemDefinition } from './world/worldSystem';
 
-export type LevelId = 1 | 2 | 3;
+export type LevelId = 1 | 2 | 3 | 4;
 
 export type LevelDefinition = {
   id: LevelId;
@@ -17,6 +18,7 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
     id: 1,
     name: 'Azure Reach',
     environment: {
+      atmosphere: true,
       horizon: 0x9bd8ee,
       zenith: 0x238ed1,
       upperSky: 0x69bde7,
@@ -39,6 +41,7 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
     id: 2,
     name: 'Tempest Shards',
     environment: {
+      atmosphere: true,
       horizon: 0x344954,
       zenith: 0x07131f,
       upperSky: 0x172c3a,
@@ -61,6 +64,7 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
     id: 3,
     name: 'Sunscar Canyon',
     environment: {
+      atmosphere: true,
       horizon: 0xe9a45f,
       zenith: 0x72bdd5,
       upperSky: 0xb8dce2,
@@ -75,6 +79,26 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
       exposure: 0.9,
     },
     systems: [desertCanyon({ sand: 0xc9823f, rock: [0x9a4027, 0xc45f31, 0xe18443] })],
+  },
+  4: {
+    id: 4,
+    name: 'Umbra Belt',
+    environment: {
+      atmosphere: false,
+      horizon: 0x101a2c,
+      zenith: 0x010207,
+      upperSky: 0x18213b,
+      sunset: 0x824943,
+      sunDirection: [-0.58, 0.42, 0.7],
+      sunColor: 0xffb77f,
+      sunIntensity: 2.25,
+      hemisphereSky: 0x6d9cb2,
+      hemisphereGround: 0x261821,
+      hemisphereIntensity: 1.35,
+      skySunIntensity: 0.15,
+      exposure: 0.92,
+    },
+    systems: [asteroidBelt({ rock: [0x414555, 0x676370, 0x8a6552], dust: 0x77d9df })],
   },
 };
 

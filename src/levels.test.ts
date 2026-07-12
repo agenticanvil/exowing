@@ -7,6 +7,7 @@ describe('level definitions', () => {
       id: 1,
       name: 'Open Space',
       environment: {
+        atmosphere: false,
         horizon: 0x02030a,
         zenith: 0x000000,
         upperSky: 0x070b20,
@@ -30,5 +31,16 @@ describe('level definitions', () => {
     const systems = LEVELS[3].systems.map((definition) => definition.create());
 
     expect(systems.map((system) => system.id)).toEqual(['desert-canyon']);
+  });
+
+  it('defines the asteroid belt without a surface system', () => {
+    const systems = LEVELS[4].systems.map((definition) => definition.create());
+
+    expect(systems.map((system) => system.id)).toEqual(['asteroid-belt']);
+    expect(LEVELS[4].environment.atmosphere).toBe(false);
+  });
+
+  it('marks the terrestrial levels as atmospheric', () => {
+    expect([LEVELS[1], LEVELS[2], LEVELS[3]].every((level) => level.environment.atmosphere)).toBe(true);
   });
 });
