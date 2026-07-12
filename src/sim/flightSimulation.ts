@@ -4,6 +4,8 @@ import { controlEnemy } from './enemyControllers';
 import { createWorld, type WorldRuntime } from '../world/worldSystem';
 
 const PLAYER_SPEED = 12;
+export const BARREL_ROLL_DURATION = 0.5;
+const BARREL_ROLL_SPEED = 18.5;
 const SHOT_SPEED = 68;
 const FIRE_INTERVAL = 0.18;
 const SLOW_RAIL_SPEED = 6;
@@ -37,9 +39,13 @@ export class FlightSimulation {
   private readonly difficultyMultiplier: number;
   private spawnedWaves = 0;
   private bossSpawned = false;
+  private rollTimeRemaining = 0;
 
   constructor(options: { health?: number; score?: number; level?: number; world?: WorldRuntime } = {}) {
-    this.player = { offsetX: 0, offsetY: 4, velocityX: 0, velocityY: 0, health: options.health ?? 5 };
+    this.player = {
+      offsetX: 0, offsetY: 4, velocityX: 0, velocityY: 0, health: options.health ?? 5,
+      rollDirection: 0, rollProgress: 0,
+    };
     this.score = options.score ?? 0;
     this.difficultyMultiplier = 1.2 ** Math.max(0, (options.level ?? 1) - 1);
     this.world = options.world ?? createWorld([]);
@@ -59,10 +65,21 @@ export class FlightSimulation {
     this.streamCombat();
     this.world.step(this.railDistance);
 
-    this.player.velocityX = command.steerX * PLAYER_SPEED;
+    if (this.rollTimeRemaining === 0 && (command.roll ?? 0) !== 0) {
+      this.player.rollDirection = Math.sign(command.roll ?? 0);
+      this.player.rollProgress = 0;
+      this.rollTimeRemaining = BARREL_ROLL_DURATION;
+    }
+    const isRolling = this.rollTimeRemaining > 0;
+    this.player.velocityX = isRolling ? this.player.rollDirection * BARREL_ROLL_SPEED : command.steerX * PLAYER_SPEED;
     this.player.velocityY = command.steerY * PLAYER_SPEED;
-    this.player.offsetX = clamp(this.player.offsetX + this.player.velocityX * dt, -FLIGHT_WINDOW.maxX, FLIGHT_WINDOW.maxX);
+    const lateralDt = isRolling ? Math.min(dt, this.rollTimeRemaining) : dt;
+    this.player.offsetX = clamp(this.player.offsetX + this.player.velocityX * lateralDt, -FLIGHT_WINDOW.maxX, FLIGHT_WINDOW.maxX);
     this.player.offsetY = clamp(this.player.offsetY + this.player.velocityY * dt, FLIGHT_WINDOW.minY, FLIGHT_WINDOW.maxY);
+    if (isRolling) {
+      this.rollTimeRemaining = Math.max(0, this.rollTimeRemaining - dt);
+      this.player.rollProgress = Math.min(1, 1 - this.rollTimeRemaining / BARREL_ROLL_DURATION);
+    }
 
     if (command.fire && this.fireCooldown === 0) {
       const rail = railFrameAtDistance(this.railDistance);
@@ -107,7 +124,7 @@ export class FlightSimulation {
 
     const playerWorld = railOffsetPosition(this.railDistance, this.player.offsetX, this.player.offsetY);
     let damageTaken = 0;
-    for (const shot of this.projectiles) if (shot.owner === 'enemy' && distanceSquared(shot.position, playerWorld) <= (shot.radius + 0.9) ** 2) {
+    for (const shot of this.projectiles) if (!isRolling && shot.owner === 'enemy' && distanceSquared(shot.position, playerWorld) <= (shot.radius + 0.9) ** 2) {
       hitShots.add(shot.id);
       result.playerHits++;
       damageTaken += shot.damage ?? 1;

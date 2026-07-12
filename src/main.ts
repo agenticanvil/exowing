@@ -52,6 +52,7 @@ app.innerHTML = `
       <h1>CONTROLS</h1>
       <dl>
         <div><dt>MOVE</dt><dd>W A S D</dd></div>
+        <div><dt>BARREL ROLL / DODGE</dt><dd>Q / E</dd></div>
         <div><dt>FIRE</dt><dd>SPACE</dd></div>
         <div><dt>FASTER</dt><dd>SHIFT</dd></div>
         <div><dt>BRAKE</dt><dd>ALT</dd></div>

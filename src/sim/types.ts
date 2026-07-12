@@ -5,6 +5,7 @@ export type PlayerCommand = {
   steerY: number;
   fire: boolean;
   pace: number;
+  roll?: number;
 };
 
 export type PlayerState = {
@@ -13,6 +14,8 @@ export type PlayerState = {
   velocityX: number;
   velocityY: number;
   health: number;
+  rollDirection: number;
+  rollProgress: number;
 };
 
 export type EnemyControllerId = 'standard' | 'formation' | 'boss';

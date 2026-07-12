@@ -102,7 +102,8 @@ export class GameView {
     this.ship.rotation.y = -rail.heading;
     const turnBank = splineTurnStrength(sim.railDistance) * TURN_BANK;
     const inputBank = sim.player.velocityX / 12 * INPUT_BANK;
-    this.ship.rotation.z = turnBank + inputBank;
+    const barrelRoll = sim.player.rollDirection * sim.player.rollProgress * Math.PI * 2;
+    this.ship.rotation.z = turnBank + inputBank + barrelRoll;
     this.ship.rotation.x = playerPitch(sim.player.offsetY, sim.player.velocityY);
     this.ship.updateMatrixWorld(true);
     this.wingtipVortices?.update(sim.railSpeed, renderDt);

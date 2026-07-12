@@ -12,7 +12,7 @@ describe('FlightSimulation', () => {
     const first = new FlightSimulation();
     const second = new FlightSimulation();
     for (let i = 0; i < 120; i++) {
-      const command = { steerX: 1, steerY: 1, fire: false, pace: 0 };
+      const command = { steerX: 1, steerY: 1, fire: false, pace: 0, roll: 0 };
       first.step(command, 1 / 60);
       second.step(command, 1 / 60);
     }
@@ -20,6 +20,28 @@ describe('FlightSimulation', () => {
     expect(first.player.offsetX).toBe(14);
     expect(first.player.offsetY).toBe(13);
     expect(first.railDistance).toBeCloseTo(30);
+  });
+
+  it('barrel rolls laterally, stays in bounds, and dodges hostile shots', () => {
+    const sim = new FlightSimulation();
+    sim.enemies.length = 0;
+    sim.projectiles.length = 0;
+    sim.projectiles.push({
+      id: 9999, position: railOffsetPosition(0, 0, 4), velocity: { x: 0, y: 0, z: 0 },
+      radius: 2, owner: 'enemy',
+    });
+
+    const result = sim.step({ steerX: 0, steerY: 0, fire: false, pace: 0, roll: 1 }, 1 / 60);
+    expect(result.playerHits).toBe(0);
+    expect(sim.player.health).toBe(5);
+    expect(sim.player.offsetX).toBeGreaterThan(0);
+    expect(sim.player.rollDirection).toBe(1);
+
+    for (let i = 0; i < 60; i++) sim.step({ steerX: 0, steerY: 0, fire: false, pace: 0, roll: 0 }, 1 / 60);
+    expect(sim.player.offsetX).toBeCloseTo(9.25);
+    expect(sim.player.offsetX).toBeLessThanOrEqual(14);
+    expect(sim.player.rollDirection).toBe(1);
+    expect(sim.player.rollProgress).toBe(1);
   });
 
   it('removes a sphere enemy hit by a straight projectile', () => {
