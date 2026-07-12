@@ -30,7 +30,7 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
       exposure: 1,
     },
     systems: [
-      oceanSurface({ deep: 0x052e60, face: 0x047599, horizon: 0x1a9eb8, foam: 0xe5fcf7 }),
+      oceanSurface({ deep: 0x03445d, face: 0x008f95, horizon: 0x25bdb5, foam: 0xe8fff8 }),
       islandField({ style: 'weathered', color: 0x8b714d }),
     ],
   },

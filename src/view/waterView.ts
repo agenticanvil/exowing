@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { WaterSurfaceOptions } from '../world/waterSystem';
-import type { WaterObstacle } from '../world/worldSystem';
+import type { LevelEnvironment, WaterObstacle } from '../world/worldSystem';
 
 const WATER_SIZE = 360;
 const WATER_SEGMENTS = 224;
@@ -9,7 +9,7 @@ const MAX_FOAM_ISLANDS = 8;
 export class WaterView {
   readonly mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
 
-  constructor(surface: WaterSurfaceOptions, sunDirection: readonly [number, number, number]) {
+  constructor(surface: WaterSurfaceOptions, environment: LevelEnvironment) {
     const geometry = new THREE.PlaneGeometry(WATER_SIZE, WATER_SIZE, WATER_SEGMENTS, WATER_SEGMENTS);
     geometry.rotateX(-Math.PI / 2);
     const material = new THREE.ShaderMaterial({
@@ -19,11 +19,16 @@ export class WaterView {
       uniforms: {
         ...THREE.UniformsLib.fog,
         uTime: { value: 0 },
-        uSunDirection: { value: new THREE.Vector3(...sunDirection).normalize() },
+        uSunDirection: { value: new THREE.Vector3(...environment.sunDirection).normalize() },
         uDeepColor: { value: new THREE.Color(surface.deep) },
         uFaceColor: { value: new THREE.Color(surface.face) },
         uHorizonColor: { value: new THREE.Color(surface.horizon) },
         uFoamColor: { value: new THREE.Color(surface.foam) },
+        uSkyHorizonColor: { value: new THREE.Color(environment.horizon) },
+        uSkyZenithColor: { value: new THREE.Color(environment.zenith) },
+        uSkyUpperColor: { value: new THREE.Color(environment.upperSky) },
+        uSkySunsetColor: { value: new THREE.Color(environment.sunset) },
+        uSkySunIntensity: { value: environment.skySunIntensity },
         uIslandCount: { value: 0 },
         uIslands: { value: Array.from({ length: MAX_FOAM_ISLANDS }, () => new THREE.Vector4()) },
         uIslandRotations: { value: Array.from({ length: MAX_FOAM_ISLANDS }, () => new THREE.Vector2()) },
@@ -55,44 +60,55 @@ const waterVertexShader = /* glsl */ `
   varying vec3 vWorldPosition;
   varying vec3 vWorldNormal;
   varying float vWaveHeight;
+  varying float vWaveCompression;
   #include <fog_pars_vertex>
 
-  float wave(vec2 point, vec2 direction, float frequency, float speed, float amplitude) {
-    return sin(dot(point, direction) * frequency + uTime * speed) * amplitude;
-  }
-
-  vec2 waveGradient(vec2 point, vec2 direction, float frequency, float speed, float amplitude) {
+  void gerstner(
+    vec2 point, vec2 direction, float frequency, float speed, float amplitude, float steepness,
+    inout vec3 displacement, inout vec3 tangentX, inout vec3 tangentZ, inout float compression
+  ) {
     float phase = dot(point, direction) * frequency + uTime * speed;
-    return cos(phase) * amplitude * frequency * direction;
+    float sine = sin(phase);
+    float cosine = cos(phase);
+    float horizontal = steepness * amplitude;
+    displacement += vec3(direction.x * horizontal * cosine, amplitude * sine, direction.y * horizontal * cosine);
+    tangentX += vec3(
+      -direction.x * direction.x * horizontal * frequency * sine,
+      direction.x * amplitude * frequency * cosine,
+      -direction.x * direction.y * horizontal * frequency * sine
+    );
+    tangentZ += vec3(
+      -direction.x * direction.y * horizontal * frequency * sine,
+      direction.y * amplitude * frequency * cosine,
+      -direction.y * direction.y * horizontal * frequency * sine
+    );
+    compression += max(sine, 0.0) * steepness * amplitude;
   }
 
   void main() {
     vec4 world = modelMatrix * vec4(position, 1.0);
     vec2 point = world.xz;
-    float height = 0.0;
-    vec2 gradient = vec2(0.0);
+    vec3 displacement = vec3(0.0);
+    vec3 tangentX = vec3(1.0, 0.0, 0.0);
+    vec3 tangentZ = vec3(0.0, 0.0, 1.0);
+    float compression = 0.0;
     vec2 directionA = normalize(vec2(1.0, 0.28));
     vec2 directionB = normalize(vec2(-0.35, 1.0));
     vec2 directionC = normalize(vec2(0.72, 1.0));
     vec2 directionD = normalize(vec2(-1.0, 0.62));
     vec2 directionE = normalize(vec2(0.25, -1.0));
     vec2 directionF = normalize(vec2(-0.78, -0.63));
-    height += wave(point, directionA, 0.075, 0.72, 0.42);
-    height += wave(point, directionB, 0.13, 1.05, 0.25);
-    height += wave(point, directionC, 0.23, 1.55, 0.13);
-    height += wave(point, directionD, 0.38, 2.10, 0.055);
-    height += wave(point, directionE, 0.62, 2.75, 0.028);
-    height += wave(point, directionF, 0.31, 1.82, 0.065);
-    gradient += waveGradient(point, directionA, 0.075, 0.72, 0.42);
-    gradient += waveGradient(point, directionB, 0.13, 1.05, 0.25);
-    gradient += waveGradient(point, directionC, 0.23, 1.55, 0.13);
-    gradient += waveGradient(point, directionD, 0.38, 2.10, 0.055);
-    gradient += waveGradient(point, directionE, 0.62, 2.75, 0.028);
-    gradient += waveGradient(point, directionF, 0.31, 1.82, 0.065);
-    world.y += height;
+    gerstner(point, directionA, 0.070, 0.68, 0.78, 0.72, displacement, tangentX, tangentZ, compression);
+    gerstner(point, directionB, 0.115, 0.94, 0.42, 0.58, displacement, tangentX, tangentZ, compression);
+    gerstner(point, directionC, 0.19, 1.32, 0.22, 0.48, displacement, tangentX, tangentZ, compression);
+    gerstner(point, directionD, 0.31, 1.82, 0.11, 0.38, displacement, tangentX, tangentZ, compression);
+    gerstner(point, directionE, 0.52, 2.42, 0.052, 0.26, displacement, tangentX, tangentZ, compression);
+    gerstner(point, directionF, 0.255, 1.58, 0.12, 0.40, displacement, tangentX, tangentZ, compression);
+    world.xyz += displacement;
     vWorldPosition = world.xyz;
-    vWorldNormal = normalize(vec3(-gradient.x, 1.0, -gradient.y));
-    vWaveHeight = height;
+    vWorldNormal = normalize(cross(tangentZ, tangentX));
+    vWaveHeight = displacement.y;
+    vWaveCompression = compression;
     vec4 mvPosition = viewMatrix * world;
     gl_Position = projectionMatrix * mvPosition;
     #include <fog_vertex>
@@ -106,12 +122,18 @@ const waterFragmentShader = /* glsl */ `
   uniform vec3 uFaceColor;
   uniform vec3 uHorizonColor;
   uniform vec3 uFoamColor;
+  uniform vec3 uSkyHorizonColor;
+  uniform vec3 uSkyZenithColor;
+  uniform vec3 uSkyUpperColor;
+  uniform vec3 uSkySunsetColor;
+  uniform float uSkySunIntensity;
   uniform int uIslandCount;
   uniform vec4 uIslands[${MAX_FOAM_ISLANDS}];
   uniform vec2 uIslandRotations[${MAX_FOAM_ISLANDS}];
   varying vec3 vWorldPosition;
   varying vec3 vWorldNormal;
   varying float vWaveHeight;
+  varying float vWaveCompression;
   #include <fog_pars_fragment>
 
   float hash21(vec2 point) {
@@ -137,6 +159,27 @@ const waterFragmentShader = /* glsl */ `
       + valueNoise(point * 4.19 - 7.1) * 0.18;
   }
 
+  vec3 reflectedSky(vec3 direction) {
+    direction = normalize(direction);
+    float elevation = clamp(direction.y, 0.0, 1.0);
+    float upperBlend = smoothstep(0.02, 0.58, elevation);
+    float zenithBlend = smoothstep(0.48, 1.0, elevation);
+    vec3 sky = mix(uSkyHorizonColor, uSkyUpperColor, upperBlend);
+    sky = mix(sky, uSkyZenithColor, zenithBlend * 0.88);
+
+    float sunAlignment = max(dot(direction, normalize(uSunDirection)), 0.0);
+    sky = mix(sky, uSkySunsetColor, pow(sunAlignment, 5.0) * (1.0 - elevation * 0.3) * 0.42);
+    float sunGlow = pow(sunAlignment, 96.0) * uSkySunIntensity;
+    sky += vec3(1.0, 0.78, 0.48) * sunGlow * 1.35;
+
+    vec2 cloudPoint = direction.xz / max(direction.y + 0.22, 0.25);
+    cloudPoint = cloudPoint * 0.72 + vec2(uTime * 0.006, -uTime * 0.003);
+    float cloudNoise = detailNoise(cloudPoint) * 0.66 + detailNoise(cloudPoint * 2.4 + 11.7) * 0.34;
+    float cloud = smoothstep(0.52, 0.73, cloudNoise) * smoothstep(0.02, 0.42, elevation);
+    vec3 cloudColor = mix(uSkyHorizonColor * 1.2, vec3(0.93, 0.96, 0.98), elevation);
+    return mix(sky, cloudColor, cloud * 0.72);
+  }
+
   void main() {
     vec2 ripplePoint = vWorldPosition.xz;
     vec2 ripple = vec2(
@@ -151,11 +194,12 @@ const waterFragmentShader = /* glsl */ `
       sin(dot(ripplePoint, normalize(vec2(-0.91, 0.42))) * 3.35 + uTime * 5.4),
       sin(dot(ripplePoint, normalize(vec2(0.57, 0.82))) * 3.75 - uTime * 5.9)
     );
+    float detailFade = smoothstep(190.0, 24.0, distance(cameraPosition, vWorldPosition));
     vec3 normal = normalize(vWorldNormal + vec3(
-      ripple.x * 0.025 + fineRipple.x * 0.009 + microRipple.x * 0.004,
+      ripple.x * 0.042 + fineRipple.x * 0.018 + microRipple.x * 0.007,
       0.0,
-      ripple.y * 0.025 + fineRipple.y * 0.009 + microRipple.y * 0.004
-    ));
+      ripple.y * 0.042 + fineRipple.y * 0.018 + microRipple.y * 0.007
+    ) * detailFade);
     vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
     vec3 sunDirection = normalize(uSunDirection);
 
@@ -163,7 +207,7 @@ const waterFragmentShader = /* glsl */ `
     float slope = 1.0 - facing;
     float diffuse = max(dot(normal, sunDirection), 0.0);
     diffuse = floor(diffuse * 16.0) / 16.0;
-    float fresnel = pow(1.0 - max(dot(viewDirection, normal), 0.0), 3.0);
+    float fresnel = pow(1.0 - max(dot(viewDirection, normal), 0.0), 4.0);
 
     // Cool ambient shaping keeps wave faces readable when the sun reflection is
     // outside the camera view. It follows the normals, not a second light source.
@@ -175,7 +219,10 @@ const waterFragmentShader = /* glsl */ `
     vec3 color = mix(uDeepColor, uFaceColor, clamp(slope * 3.2 + diffuse * 0.20 + heightTone * 0.10, 0.0, 1.0));
     color *= mix(0.88, 1.10, ambientFace);
     color = mix(color, uHorizonColor, heightTone * slope * 0.16);
-    color = mix(color, uHorizonColor, fresnel * 0.42);
+    vec3 reflectionDirection = reflect(-viewDirection, normal);
+    vec3 skyReflection = reflectedSky(reflectionDirection);
+    skyReflection = mix(uHorizonColor, skyReflection, 0.68);
+    color = mix(color, skyReflection, 0.045 + fresnel * 0.42);
     color *= 0.82 + diffuse * 0.24;
 
     float broadVariation = valueNoise(vWorldPosition.xz * 0.035 + vec2(uTime * 0.012, -uTime * 0.008));
@@ -189,7 +236,8 @@ const waterFragmentShader = /* glsl */ `
     float streakNoise = detailNoise(vec2(foamPoint.x * 0.72, foamPoint.y * 2.35) + 21.3);
     float noise = coarseNoise * 0.46 + fineNoise * 0.36 + streakNoise * 0.18;
     color *= 0.95 + noise * 0.09;
-    float crest = smoothstep(0.49, 0.61, vWaveHeight + slope * 0.18);
+    float crestShape = vWaveCompression * 0.78 + slope * 1.7 + max(vWaveHeight, 0.0) * 0.16;
+    float crest = smoothstep(0.52, 0.88, crestShape);
     float brokenCrest = smoothstep(0.61, 0.72, noise)
       * smoothstep(0.49, 0.64, fineNoise)
       * smoothstep(0.38, 0.62, streakNoise);
@@ -234,11 +282,12 @@ const waterFragmentShader = /* glsl */ `
     color = mix(color, uFoamColor, clamp(shorelineFoam, 0.0, 0.94));
 
     vec3 halfVector = normalize(sunDirection + viewDirection);
+    float broadGlint = pow(max(dot(normal, halfVector), 0.0), 34.0);
     float sparkle = pow(max(dot(normal, halfVector), 0.0), 112.0);
     float fineSparkle = pow(max(dot(normalize(normal + vec3(microRipple.x, 0.0, microRipple.y) * 0.018), halfVector), 0.0), 190.0);
     float sparkleBreakup = smoothstep(0.54, 0.69, detailNoise(ripplePoint * 1.15 + uTime * 0.08));
     sparkle = (sparkle * 0.68 + fineSparkle * 0.52) * sparkleBreakup;
-    color += vec3(1.0, 0.83, 0.55) * sparkle * 0.88;
+    color += vec3(1.0, 0.82, 0.56) * (broadGlint * 0.22 + sparkle * 0.86);
 
     float shallowClarity = shallowWater * (1.0 - shallowDepth);
     color = mix(color, uFaceColor, shallowWater * shallowDepth * 0.30);

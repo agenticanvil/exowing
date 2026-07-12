@@ -48,6 +48,29 @@ const skyFragmentShader = /* glsl */ `
   uniform float uSunIntensity;
   varying vec3 vSkyDirection;
 
+  float hash21(vec2 point) {
+    point = fract(point * vec2(123.34, 456.21));
+    point += dot(point, point + 45.32);
+    return fract(point.x * point.y);
+  }
+
+  float valueNoise(vec2 point) {
+    vec2 cell = floor(point);
+    vec2 local = fract(point);
+    local = local * local * (3.0 - 2.0 * local);
+    return mix(
+      mix(hash21(cell), hash21(cell + vec2(1.0, 0.0)), local.x),
+      mix(hash21(cell + vec2(0.0, 1.0)), hash21(cell + vec2(1.0)), local.x),
+      local.y
+    );
+  }
+
+  float cloudNoise(vec2 point) {
+    return valueNoise(point) * 0.58
+      + valueNoise(point * 2.07 + 13.4) * 0.28
+      + valueNoise(point * 4.19 - 7.1) * 0.14;
+  }
+
   void main() {
     vec3 direction = normalize(vSkyDirection);
     float elevation = clamp(direction.y, 0.0, 1.0);
@@ -62,6 +85,12 @@ const skyFragmentShader = /* glsl */ `
 
     float horizonHaze = pow(1.0 - elevation, 9.0);
     sky = mix(sky, uHorizonColor * 1.08, horizonHaze * 0.72);
+
+    vec2 cloudPoint = direction.xz / max(direction.y + 0.22, 0.25) * 0.72;
+    float clouds = cloudNoise(cloudPoint) * 0.66 + cloudNoise(cloudPoint * 2.4 + 11.7) * 0.34;
+    clouds = smoothstep(0.53, 0.72, clouds) * smoothstep(0.03, 0.38, elevation);
+    vec3 cloudColor = mix(uHorizonColor * 1.16, vec3(0.94, 0.96, 0.98), elevation);
+    sky = mix(sky, cloudColor, clouds * 0.68);
 
     float sunHalo = pow(sunAlignment, 72.0);
     float sunAura = pow(sunAlignment, 320.0);

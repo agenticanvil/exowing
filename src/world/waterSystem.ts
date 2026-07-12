@@ -15,7 +15,7 @@ class WaterSystem implements WorldSystem {
   constructor(private readonly options: WaterSurfaceOptions) {}
 
   attach({ scene, environment }: WorldAttachContext) {
-    this.view = new WaterView(this.options, environment.sunDirection);
+    this.view = new WaterView(this.options, environment);
     scene.add(this.view.mesh);
   }
 
