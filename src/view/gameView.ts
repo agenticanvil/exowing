@@ -11,6 +11,7 @@ import { SkyView } from './skyView';
 import type { WorldRuntime } from '../world/worldSystem';
 import type { GameAssets } from '../assets/gameAssets';
 import { JetExhaustView } from './jetExhaustView';
+import { WingtipVortexView } from './wingtipVortexView';
 
 const TURN_BANK = THREE.MathUtils.degToRad(20);
 const INPUT_BANK = THREE.MathUtils.degToRad(6);
@@ -31,6 +32,7 @@ export class GameView {
   private readonly fxaaPass = new FXAAPass();
   private readonly ship: THREE.Group;
   private readonly jetExhaust: JetExhaustView;
+  private readonly wingtipVortices?: WingtipVortexView;
   private readonly enemyViews = new Map<number, THREE.Mesh>();
   private readonly projectileViews = new Map<number, THREE.Group>();
   private readonly enemyGeometry = new THREE.SphereGeometry(1.25, 16, 10);
@@ -80,6 +82,7 @@ export class GameView {
     this.ship = assets?.createPlayer() ?? createPlaceholderShip();
     this.jetExhaust = new JetExhaustView(this.ship);
     this.scene.add(this.ship);
+    if (environment.atmosphere) this.wingtipVortices = new WingtipVortexView(this.scene, this.ship);
 
     this.flightWindowGuide = addFlightWindow(this.scene);
     this.flightWindowGuide.visible = false;
@@ -90,7 +93,8 @@ export class GameView {
 
   sync(sim: FlightSimulation) {
     const renderTime = performance.now() * 0.001;
-    this.jetExhaust.update(sim.railSpeed, renderTime - this.previousRenderTime);
+    const renderDt = renderTime - this.previousRenderTime;
+    this.jetExhaust.update(sim.railSpeed, renderDt);
     this.previousRenderTime = renderTime;
     const rail = railFrameAtDistance(sim.railDistance);
     const shipPosition = railOffsetPosition(sim.railDistance, sim.player.offsetX, sim.player.offsetY);
@@ -100,6 +104,8 @@ export class GameView {
     const inputBank = sim.player.velocityX / 12 * INPUT_BANK;
     this.ship.rotation.z = turnBank + inputBank;
     this.ship.rotation.x = playerPitch(sim.player.offsetY, sim.player.velocityY);
+    this.ship.updateMatrixWorld(true);
+    this.wingtipVortices?.update(sim.railSpeed, renderDt);
     syncEnemyMeshes(this.scene, this.enemyViews, sim.enemies, this.enemyGeometry, this.enemyMaterial, this.bossMaterial);
     syncProjectiles(this.scene, this.projectileViews, sim.projectiles, this.shotCoreGeometry, this.shotGlowGeometry);
     const windowCenterY = (FLIGHT_WINDOW.minY + FLIGHT_WINDOW.maxY) / 2;
