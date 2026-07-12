@@ -10,9 +10,12 @@ import { railFrameAtDistance, railOffsetPosition } from '../sim/railSystem';
 import { SkyView } from './skyView';
 import type { WorldRuntime } from '../world/worldSystem';
 import type { GameAssets } from '../assets/gameAssets';
+import { JetExhaustView } from './jetExhaustView';
 
 const TURN_BANK = THREE.MathUtils.degToRad(20);
 const INPUT_BANK = THREE.MathUtils.degToRad(6);
+const PITCH_PER_VERTICAL_SPEED = 0.016;
+const PITCH_LEVELING_DISTANCE = 2;
 const BANK_SAMPLE_DISTANCE = 14;
 const FULL_TURN_HEADING_DELTA = THREE.MathUtils.degToRad(10.5);
 const PROJECTILE_AXIS = new THREE.Vector3(0, 1, 0);
@@ -27,6 +30,7 @@ export class GameView {
   private readonly composer: EffectComposer;
   private readonly fxaaPass = new FXAAPass();
   private readonly ship: THREE.Group;
+  private readonly jetExhaust: JetExhaustView;
   private readonly enemyViews = new Map<number, THREE.Mesh>();
   private readonly projectileViews = new Map<number, THREE.Group>();
   private readonly enemyGeometry = new THREE.SphereGeometry(1.25, 16, 10);
@@ -40,6 +44,7 @@ export class GameView {
   private readonly splineGuide: THREE.Line;
   private readonly sunDirection: THREE.Vector3;
   private renderScale = 1;
+  private previousRenderTime = performance.now() * 0.001;
 
   constructor(container: HTMLElement, level: LevelDefinition, private readonly world: WorldRuntime, assets?: GameAssets) {
     const environment = level.environment;
@@ -73,6 +78,7 @@ export class GameView {
     this.world.attach(this.scene, environment);
 
     this.ship = assets?.createPlayer() ?? createPlaceholderShip();
+    this.jetExhaust = new JetExhaustView(this.ship);
     this.scene.add(this.ship);
 
     this.flightWindowGuide = addFlightWindow(this.scene);
@@ -83,6 +89,9 @@ export class GameView {
   }
 
   sync(sim: FlightSimulation) {
+    const renderTime = performance.now() * 0.001;
+    this.jetExhaust.update(sim.railSpeed, renderTime - this.previousRenderTime);
+    this.previousRenderTime = renderTime;
     const rail = railFrameAtDistance(sim.railDistance);
     const shipPosition = railOffsetPosition(sim.railDistance, sim.player.offsetX, sim.player.offsetY);
     this.ship.position.set(shipPosition.x, shipPosition.y, shipPosition.z);
@@ -90,7 +99,7 @@ export class GameView {
     const turnBank = splineTurnStrength(sim.railDistance) * TURN_BANK;
     const inputBank = sim.player.velocityX / 12 * INPUT_BANK;
     this.ship.rotation.z = turnBank + inputBank;
-    this.ship.rotation.x = sim.player.velocityY * 0.012;
+    this.ship.rotation.x = playerPitch(sim.player.offsetY, sim.player.velocityY);
     syncEnemyMeshes(this.scene, this.enemyViews, sim.enemies, this.enemyGeometry, this.enemyMaterial, this.bossMaterial);
     syncProjectiles(this.scene, this.projectileViews, sim.projectiles, this.shotCoreGeometry, this.shotGlowGeometry);
     const windowCenterY = (FLIGHT_WINDOW.minY + FLIGHT_WINDOW.maxY) / 2;
@@ -105,7 +114,7 @@ export class GameView {
     this.sky.update(this.camera.position);
     this.sunLight.target.position.set(railCenter.x, railCenter.y, railCenter.z);
     this.sunLight.position.copy(this.sunLight.target.position).addScaledVector(this.sunDirection, 120);
-    this.world.render(rail.position.x, rail.position.z, performance.now() * 0.001);
+    this.world.render(rail.position.x, rail.position.z, renderTime);
     this.flightWindowGuide.position.set(rail.position.x, 0, rail.position.z);
     this.flightWindowGuide.rotation.y = Math.PI - rail.heading;
     if (this.splineGuide.visible) updateSplineGuide(this.splineGuide, sim.railDistance);
@@ -162,6 +171,17 @@ export class GameView {
     this.renderer.setSize(innerWidth, innerHeight);
     this.composer.setSize(innerWidth, innerHeight);
   };
+}
+
+export function playerPitch(offsetY: number, velocityY: number) {
+  if (velocityY === 0) return 0;
+  const distanceToEdge = velocityY > 0
+    ? FLIGHT_WINDOW.maxY - offsetY
+    : offsetY - FLIGHT_WINDOW.minY;
+  const levelingProgress = THREE.MathUtils.clamp(distanceToEdge / PITCH_LEVELING_DISTANCE, 0, 1);
+  const easedPitchScale = THREE.MathUtils.smoothstep(levelingProgress, 0, 1);
+  if (easedPitchScale === 0) return 0;
+  return -velocityY * PITCH_PER_VERTICAL_SPEED * easedPitchScale;
 }
 
 function createPlaceholderShip(): THREE.Group {
