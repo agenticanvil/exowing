@@ -9,6 +9,7 @@ import { FLIGHT_WINDOW, type FlightSimulation } from '../sim/flightSimulation';
 import { railFrameAtDistance, railOffsetPosition } from '../sim/railSystem';
 import { SkyView } from './skyView';
 import type { WorldRuntime } from '../world/worldSystem';
+import type { GameAssets } from '../assets/gameAssets';
 
 const TURN_BANK = THREE.MathUtils.degToRad(20);
 const INPUT_BANK = THREE.MathUtils.degToRad(6);
@@ -25,7 +26,7 @@ export class GameView {
   private readonly camera = new THREE.PerspectiveCamera(62, 1, 0.1, 500);
   private readonly composer: EffectComposer;
   private readonly fxaaPass = new FXAAPass();
-  private readonly ship: THREE.Mesh;
+  private readonly ship: THREE.Group;
   private readonly enemyViews = new Map<number, THREE.Mesh>();
   private readonly projectileViews = new Map<number, THREE.Group>();
   private readonly enemyGeometry = new THREE.SphereGeometry(1.25, 16, 10);
@@ -40,7 +41,7 @@ export class GameView {
   private readonly sunDirection: THREE.Vector3;
   private renderScale = 1;
 
-  constructor(container: HTMLElement, level: LevelDefinition, private readonly world: WorldRuntime) {
+  constructor(container: HTMLElement, level: LevelDefinition, private readonly world: WorldRuntime, assets?: GameAssets) {
     const environment = level.environment;
     this.sunDirection = new THREE.Vector3(...environment.sunDirection).normalize();
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -71,17 +72,7 @@ export class GameView {
 
     this.world.attach(this.scene, environment);
 
-    const shape = new THREE.Shape();
-    shape.moveTo(0, 1.35);
-    shape.lineTo(-1.15, -1.05);
-    shape.lineTo(0, -0.55);
-    shape.lineTo(1.15, -1.05);
-    shape.closePath();
-    const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.42, bevelEnabled: false });
-    geometry.center();
-    geometry.rotateX(Math.PI / 2);
-    this.ship = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: 0xf2f5f7, roughness: 0.5 }));
-    this.ship.scale.setScalar(1.15);
+    this.ship = assets?.createPlayer() ?? createPlaceholderShip();
     this.scene.add(this.ship);
 
     this.flightWindowGuide = addFlightWindow(this.scene);
@@ -171,6 +162,23 @@ export class GameView {
     this.renderer.setSize(innerWidth, innerHeight);
     this.composer.setSize(innerWidth, innerHeight);
   };
+}
+
+function createPlaceholderShip(): THREE.Group {
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 1.35);
+  shape.lineTo(-1.15, -1.05);
+  shape.lineTo(0, -0.55);
+  shape.lineTo(1.15, -1.05);
+  shape.closePath();
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.42, bevelEnabled: false });
+  geometry.center();
+  geometry.rotateX(Math.PI / 2);
+  const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: 0xf2f5f7, roughness: 0.5 }));
+  mesh.scale.setScalar(1.15);
+  const group = new THREE.Group();
+  group.add(mesh);
+  return group;
 }
 
 function syncProjectiles(

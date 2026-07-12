@@ -4,6 +4,7 @@ import { LEVELS, type LevelId } from './levels';
 import { createWorld } from './world/worldSystem';
 import { FlightSimulation } from './sim/flightSimulation';
 import { GameView } from './view/gameView';
+import { loadGameAssets, type AssetLoadProgress } from './assets/gameAssets';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing app root');
@@ -71,6 +72,15 @@ app.innerHTML = `
     </div>` : ''}
   <div class="damage-vignette" id="damage-vignette" aria-hidden="true"></div>
   <div class="level-transition" id="level-transition" aria-live="polite"><span id="level-transition-label">LEVEL 1</span></div>
+  <div class="loading-screen" id="loading-screen" hidden aria-live="polite" aria-busy="true">
+    <div class="loading-screen__content">
+      <p class="loading-screen__eyebrow" id="loading-eyebrow">PREPARING SORTIE</p>
+      <h1 id="loading-title">LEVEL 1</h1>
+      <div class="loading-screen__track"><div class="loading-screen__fill" id="loading-fill"></div></div>
+      <p class="loading-screen__status" id="loading-status">Loading…</p>
+      <button id="loading-retry" type="button" hidden>RETRY</button>
+    </div>
+  </div>
   <div class="menu" id="game-over-menu" hidden>
     <h1 class="menu__title">GAME OVER</h1>
     <div class="menu__actions">
@@ -103,6 +113,12 @@ const healthTrack = requiredElement<HTMLDivElement>('.hud__health-track');
 const damageVignette = requiredElement<HTMLDivElement>('#damage-vignette');
 const levelTransition = requiredElement<HTMLDivElement>('#level-transition');
 const levelTransitionLabel = requiredElement<HTMLSpanElement>('#level-transition-label');
+const loadingScreen = requiredElement<HTMLDivElement>('#loading-screen');
+const loadingEyebrow = requiredElement<HTMLParagraphElement>('#loading-eyebrow');
+const loadingTitle = requiredElement<HTMLHeadingElement>('#loading-title');
+const loadingFill = requiredElement<HTMLDivElement>('#loading-fill');
+const loadingStatus = requiredElement<HTMLParagraphElement>('#loading-status');
+const loadingRetry = requiredElement<HTMLButtonElement>('#loading-retry');
 const gameOverMenu = requiredElement<HTMLDivElement>('#game-over-menu');
 const retryButton = requiredElement<HTMLButtonElement>('#retry-button');
 const gameOverMainMenuButton = requiredElement<HTMLButtonElement>('#game-over-main-menu-button');
@@ -141,6 +157,8 @@ const devSettings: DevSettings = {
 };
 let fpsFrames = 0;
 let fpsElapsed = 0;
+let loading = false;
+let retryLoad: (() => void) | null = null;
 
 function applyDevSettings() {
   fps.hidden = !devSettings.showFps;
@@ -154,31 +172,51 @@ function styleForLevel(levelNumber: number): LevelId {
   return levelNumber % 2 === 1 ? 1 : 2;
 }
 
-function startGame(levelNumber = 1, carry?: { health: number; score: number }) {
-  currentLevelNumber = levelNumber;
-  const level = LEVELS[styleForLevel(currentLevelNumber)];
-  const world = createWorld(level.systems);
-  view.dispose();
-  simulation = new FlightSimulation({ ...carry, level: currentLevelNumber, world });
-  view = new GameView(appRoot, level, world);
-  view.setRenderScale(Number(renderScaleSelect.value));
-  view.setAntiAliasing(antiAliasingInput.checked);
-  applyDevSettings();
-  mode = 'playing';
-  mainMenu.hidden = true;
-  pauseMenu.hidden = true;
-  controlsMenu.hidden = true;
-  settingsMenu.hidden = true;
-  gameOverMenu.hidden = true;
-  const devSettingsMenu = document.querySelector<HTMLDivElement>('#dev-settings-menu');
-  if (devSettingsMenu) devSettingsMenu.hidden = true;
-  closeDevSettings = null;
-  hud.hidden = false;
-  damageVignette.classList.remove('damage-vignette--active');
-  levelTransition.className = 'level-transition';
-  accumulator = 0;
-  previous = performance.now();
-  updateRenderResolution();
+async function startGame(levelNumber = 1, carry?: { health: number; score: number }) {
+  if (loading) return;
+  loading = true;
+  const isNewRun = !carry;
+  showLoading(levelNumber, isNewRun);
+  try {
+    const levelId = styleForLevel(levelNumber);
+    const assets = await withTimeout(
+      loadGameAssets(levelId, updateLoadingProgress),
+      60_000,
+      'Timed out while loading level assets.',
+    );
+    loadingStatus.textContent = 'Building world…';
+    await nextPaint();
+    currentLevelNumber = levelNumber;
+    const level = LEVELS[levelId];
+    const world = createWorld(level.systems);
+    view.dispose();
+    simulation = new FlightSimulation({ ...carry, level: currentLevelNumber, world });
+    view = new GameView(appRoot, level, world, assets);
+    view.setRenderScale(Number(renderScaleSelect.value));
+    view.setAntiAliasing(antiAliasingInput.checked);
+    applyDevSettings();
+    mode = 'playing';
+    mainMenu.hidden = true;
+    pauseMenu.hidden = true;
+    controlsMenu.hidden = true;
+    settingsMenu.hidden = true;
+    gameOverMenu.hidden = true;
+    const devSettingsMenu = document.querySelector<HTMLDivElement>('#dev-settings-menu');
+    if (devSettingsMenu) devSettingsMenu.hidden = true;
+    closeDevSettings = null;
+    hud.hidden = false;
+    damageVignette.classList.remove('damage-vignette--active');
+    levelTransition.className = 'level-transition';
+    accumulator = 0;
+    previous = performance.now();
+    updateRenderResolution();
+    hideLoading();
+  } catch (error) {
+    showLoadingError(error instanceof Error ? error.message : 'Failed to load level assets.');
+    retryLoad = () => { void startGame(levelNumber, carry); };
+  } finally {
+    loading = false;
+  }
 }
 
 function pauseGame() {
@@ -232,8 +270,9 @@ function closeSettings() {
   settingsButton.focus();
 }
 
-startButton.addEventListener('click', () => startGame(1));
-retryButton.addEventListener('click', () => startGame(1));
+startButton.addEventListener('click', () => { void startGame(1); });
+retryButton.addEventListener('click', () => { void startGame(1); });
+loadingRetry.addEventListener('click', () => retryLoad?.());
 gameOverMainMenuButton.addEventListener('click', returnToMainMenu);
 continueButton.addEventListener('click', continueGame);
 controlsButton.addEventListener('click', openControls);
@@ -243,7 +282,7 @@ controlsBackButton.addEventListener('click', closeControls);
 mainMenuButton.addEventListener('click', returnToMainMenu);
 window.addEventListener('keydown', (event) => {
   if (!event.repeat && (event.code === 'Digit1' || event.code === 'Digit2')) {
-    startGame(event.code === 'Digit1' ? 1 : 2);
+    void startGame(event.code === 'Digit1' ? 1 : 2);
     return;
   }
   if (event.code !== 'Escape' || event.repeat) return;
@@ -285,7 +324,7 @@ antiAliasingInput.addEventListener('change', () => {
 window.addEventListener('resize', updateRenderResolution);
 
 // Test/development shortcut: http://localhost:5173/?play=1
-if (new URLSearchParams(location.search).get('play') === '1') startGame();
+if (new URLSearchParams(location.search).get('play') === '1') void startGame();
 else startButton.focus();
 
 if (import.meta.env.DEV) setupDevControls();
@@ -353,11 +392,57 @@ function beginNextLevel() {
   levelTransitionLabel.textContent = `LEVEL ${nextLevel}`;
   levelTransition.className = 'level-transition level-transition--active';
   window.setTimeout(() => {
-    startGame(nextLevel, carry);
-    levelTransitionLabel.textContent = `LEVEL ${nextLevel}`;
-    levelTransition.className = 'level-transition level-transition--reveal';
-    window.setTimeout(() => { levelTransition.className = 'level-transition'; }, 850);
+    void startGame(nextLevel, carry);
   }, 900);
+}
+
+function showLoading(levelNumber: number, isNewRun: boolean) {
+  retryLoad = null;
+  loadingScreen.hidden = false;
+  loadingScreen.classList.remove('loading-screen--error');
+  loadingEyebrow.textContent = isNewRun ? 'PREPARING SORTIE' : 'ENTERING NEW AIRSPACE';
+  loadingTitle.textContent = `LEVEL ${levelNumber}`;
+  loadingStatus.textContent = 'Preparing asset manifest…';
+  loadingFill.style.width = '0%';
+  loadingRetry.hidden = true;
+  startButton.disabled = true;
+  hud.hidden = true;
+}
+
+function updateLoadingProgress(progress: AssetLoadProgress) {
+  loadingStatus.textContent = progress.label;
+  loadingFill.style.width = `${progress.total ? progress.loaded / progress.total * 100 : 0}%`;
+}
+
+function hideLoading() {
+  loadingScreen.hidden = true;
+  levelTransition.className = 'level-transition';
+  startButton.disabled = false;
+  retryLoad = null;
+}
+
+function showLoadingError(message: string) {
+  loadingScreen.classList.add('loading-screen--error');
+  loadingEyebrow.textContent = 'LOAD FAILED';
+  loadingStatus.textContent = message;
+  loadingRetry.hidden = false;
+  startButton.disabled = false;
+}
+
+function nextPaint(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+  }
 }
 
 function requiredElement<T extends Element>(selector: string): T {
@@ -409,7 +494,7 @@ function setupDevControls() {
     start(overrides = {}) {
       Object.assign(devSettings, overrides);
       applyDevSettings();
-      startGame();
+      void startGame();
     },
   };
   applyDevSettings();

@@ -48,6 +48,30 @@ canvas { display: block; }
   animation: level-reveal 850ms ease-out forwards;
 }
 
+.loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  color: white;
+  background: #02070b;
+  text-align: center;
+}
+
+.loading-screen[hidden] { display: none; }
+.loading-screen__content { width: min(440px, calc(100vw - 48px)); }
+.loading-screen__eyebrow { margin: 0 0 14px; color: #83c8ed; font-size: 11px; letter-spacing: 0.24em; }
+.loading-screen h1 { margin: 0 0 32px; font-size: clamp(34px, 7vw, 64px); font-weight: 500; letter-spacing: 0.18em; }
+.loading-screen__track { height: 3px; overflow: hidden; background: rgb(255 255 255 / 14%); }
+.loading-screen__fill { width: 0; height: 100%; background: #83c8ed; box-shadow: 0 0 12px #83c8ed; transition: width 180ms ease-out; }
+.loading-screen__status { min-height: 18px; margin: 14px 0 0; color: rgb(255 255 255 / 65%); font-size: 12px; letter-spacing: 0.08em; }
+.loading-screen--error .loading-screen__eyebrow,
+.loading-screen--error .loading-screen__status { color: #ff7385; }
+.loading-screen button { margin-top: 24px; padding: 10px 20px; color: white; background: transparent; border: 1px solid rgb(255 255 255 / 35%); font: inherit; letter-spacing: 0.14em; cursor: pointer; }
+.loading-screen button:hover,
+.loading-screen button:focus-visible { color: #83c8ed; border-color: #83c8ed; outline: none; }
+
 @keyframes level-cover {
   0% { opacity: 0; }
   70%, 100% { opacity: 1; }
