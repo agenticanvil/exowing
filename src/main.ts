@@ -5,11 +5,13 @@ import { createWorld } from './world/worldSystem';
 import { FlightSimulation } from './sim/flightSimulation';
 import { GameView } from './view/gameView';
 import { loadGameAssets, type AssetLoadProgress } from './assets/gameAssets';
+import { mountAppShell, requiredElement } from './ui/appShell';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing app root');
 const appRoot = app;
 
+/*
 app.innerHTML = `
   <div class="menu" id="main-menu">
     <h1 class="menu__title">EXOWING</h1>
@@ -105,6 +107,8 @@ app.innerHTML = `
     </div>
     <div class="hud__fps" id="fps" hidden>FPS 0</div>
   </div>`;
+*/
+mountAppShell(app);
 
 const initialWorld = createWorld(LEVELS[1].systems);
 let simulation = new FlightSimulation({ world: initialWorld });
@@ -445,12 +449,6 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: s
   } finally {
     if (timeoutId !== undefined) window.clearTimeout(timeoutId);
   }
-}
-
-function requiredElement<T extends Element>(selector: string): T {
-  const element = document.querySelector<T>(selector);
-  if (!element) throw new Error(`Missing element: ${selector}`);
-  return element;
 }
 
 function setupDevControls() {
