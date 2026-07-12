@@ -370,7 +370,7 @@ function frame(now: number) {
       fpsElapsed = 0;
     }
   }
-  view.sync(simulation);
+  if (mode === 'playing' || mode === 'transition') view.sync(simulation);
   requestAnimationFrame(frame);
 }
 
