@@ -17,15 +17,14 @@ export type IslandFieldOptions = {
 export class IslandSystem implements WorldSystem {
   readonly id = 'islands';
   readonly islands: IslandState[] = [];
-  private readonly views = new Map<number, THREE.Mesh>();
+  private readonly view: IslandView;
   private readonly spacing: number;
   private nextDistance: number;
-  private scene?: THREE.Scene;
-  private material?: THREE.MeshStandardMaterial;
 
   constructor(private readonly options: Required<IslandFieldOptions>) {
     this.spacing = options.spacing;
     this.nextDistance = options.firstDistance;
+    this.view = new IslandView(options);
   }
 
   step(context: WorldStepContext) {
@@ -45,19 +44,47 @@ export class IslandSystem implements WorldSystem {
   }
 
   attach({ scene }: WorldAttachContext) {
+    this.view.attach(scene);
+  }
+
+  render() {
+    this.view.sync(this.islands);
+  }
+
+  getWaterObstacles() {
+    return this.islands.map((island) => ({
+      x: island.position.x, z: island.position.z,
+      radiusX: island.size.x * 1.08, radiusZ: island.size.z * 1.08,
+      rotation: island.rotation,
+    }));
+  }
+
+  dispose() {
+    this.view.dispose();
+  }
+}
+
+class IslandView {
+  private readonly views = new Map<number, THREE.Mesh>();
+  private scene?: THREE.Scene;
+  private material?: THREE.MeshStandardMaterial;
+
+  constructor(private readonly options: Required<IslandFieldOptions>) {}
+
+  attach(scene: THREE.Scene) {
     this.scene = scene;
     this.material = new THREE.MeshStandardMaterial({ color: this.options.color, roughness: 1 });
   }
 
-  render() {
+  sync(islands: readonly IslandState[]) {
     if (!this.scene || !this.material) return;
-    const live = new Set(this.islands.map((island) => island.id));
+    const live = new Set(islands.map((island) => island.id));
     for (const [id, mesh] of this.views) if (!live.has(id)) {
-      this.scene.remove(mesh);
+      mesh.removeFromParent();
       mesh.geometry.dispose();
       this.views.delete(id);
     }
-    for (const island of this.islands) {
+    for (const island of islands) {
       let mesh = this.views.get(island.id);
       if (!mesh) {
         mesh = new THREE.Mesh(createIslandGeometry(island.id, this.options.style), this.material);
@@ -70,16 +97,11 @@ export class IslandSystem implements WorldSystem {
     }
   }
 
-  getWaterObstacles() {
-    return this.islands.map((island) => ({
-      x: island.position.x, z: island.position.z,
-      radiusX: island.size.x * 1.08, radiusZ: island.size.z * 1.08,
-      rotation: island.rotation,
-    }));
-  }
-
   dispose() {
-    for (const mesh of this.views.values()) mesh.geometry.dispose();
+    for (const mesh of this.views.values()) {
+      mesh.removeFromParent();
+      mesh.geometry.dispose();
+    }
     this.views.clear();
     this.material?.dispose();
     this.scene = undefined;
