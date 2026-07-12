@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { railOffsetPosition } from '../sim/railSystem';
 import type { IslandState } from '../sim/types';
-import type { WorldAttachContext, WorldStepContext, WorldSystem, WorldSystemDefinition } from './worldSystem';
+import { GROUND_SURFACE_Y, type WorldAttachContext, type WorldStepContext, type WorldSystem, type WorldSystemDefinition } from './worldSystem';
 
 const STREAM_AHEAD = 220;
 const CLEANUP_MARGIN = 38;
@@ -34,7 +34,7 @@ export class IslandSystem implements WorldSystem {
       const side = seed % 2 === 0 ? -1 : 1;
       const offset = side * (23 + seed % 17);
       const size = { x: 8 + seed % 12, y: 5 + seed % 12, z: 10 + (seed >>> 4) % 17 };
-      const position = railOffsetPosition(this.nextDistance, offset, size.y / 2 - 0.35);
+      const position = railOffsetPosition(this.nextDistance, offset, GROUND_SURFACE_Y + size.y / 2 - 0.35);
       this.islands.push({
         id: context.allocateId(), position, size,
         rotation: seed % 31 * 0.07, railDistance: this.nextDistance,

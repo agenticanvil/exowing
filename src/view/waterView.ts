@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { WaterSurfaceOptions } from '../world/waterSystem';
-import type { LevelEnvironment, WaterObstacle } from '../world/worldSystem';
+import { GROUND_SURFACE_Y, type LevelEnvironment, type WaterObstacle } from '../world/worldSystem';
 
 const WATER_SIZE = 360;
 const WATER_SEGMENTS = 224;
@@ -41,7 +41,7 @@ export class WaterView {
   }
 
   update(centerX: number, centerZ: number, time: number, obstacles: readonly WaterObstacle[]) {
-    this.mesh.position.set(centerX, 0, centerZ);
+    this.mesh.position.set(centerX, GROUND_SURFACE_Y, centerZ);
     this.mesh.material.uniforms.uTime.value = time;
     const count = Math.min(obstacles.length, MAX_FOAM_ISLANDS);
     this.mesh.material.uniforms.uIslandCount.value = count;
