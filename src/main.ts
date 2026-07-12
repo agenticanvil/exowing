@@ -6,6 +6,7 @@ import { FlightSimulation } from './sim/flightSimulation';
 import { GameView } from './view/gameView';
 import { loadGameAssets, type AssetLoadProgress } from './assets/gameAssets';
 import { mountAppShell, requiredElement } from './ui/appShell';
+import { GameLifecycle } from './game/gameLifecycle';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing app root');
@@ -153,8 +154,7 @@ const mainMenuButton = requiredElement<HTMLButtonElement>('#main-menu-button');
 const fixedDt = 1 / 60;
 let previous = performance.now();
 let accumulator = 0;
-type GameMode = 'menu' | 'playing' | 'paused' | 'transition' | 'gameover';
-let mode: GameMode = 'menu';
+const lifecycle = new GameLifecycle();
 let closeDevSettings: (() => void) | null = null;
 type DevSettingName = 'invulnerable' | 'showFps' | 'showMovementFrame' | 'showSpline';
 type DevSettings = Record<DevSettingName, boolean>;
@@ -204,7 +204,7 @@ async function startGame(levelNumber = 1, carry?: { health: number; score: numbe
     view.setRenderScale(Number(renderScaleSelect.value));
     view.setAntiAliasing(antiAliasingInput.checked);
     applyDevSettings();
-    mode = 'playing';
+    lifecycle.startPlaying();
     mainMenu.hidden = true;
     pauseMenu.hidden = true;
     controlsMenu.hidden = true;
@@ -229,20 +229,18 @@ async function startGame(levelNumber = 1, carry?: { health: number; score: numbe
 }
 
 function pauseGame() {
-  if (mode !== 'playing') return;
-  mode = 'paused';
+  if (!lifecycle.pause()) return;
   pauseMenu.hidden = false;
 }
 
 function continueGame() {
-  if (mode !== 'paused') return;
-  mode = 'playing';
+  if (!lifecycle.resume()) return;
   pauseMenu.hidden = true;
   accumulator = 0;
 }
 
 function returnToMainMenu() {
-  mode = 'menu';
+  lifecycle.returnToMenu();
   pauseMenu.hidden = true;
   mainMenu.hidden = false;
   hud.hidden = true;
@@ -304,8 +302,8 @@ window.addEventListener('keydown', (event) => {
     closeDevSettings();
     return;
   }
-  if (mode === 'playing') pauseGame();
-  else if (mode === 'paused') continueGame();
+  if (lifecycle.mode === 'playing') pauseGame();
+  else if (lifecycle.mode === 'paused') continueGame();
 });
 
 const storedRenderScale = Number(localStorage.getItem('exowing.renderScale'));
@@ -339,7 +337,7 @@ function frame(now: number) {
   const frameDt = Math.min((now - previous) / 1000, 0.1);
   accumulator += frameDt;
   previous = now;
-  while (mode === 'playing' && accumulator >= fixedDt) {
+  while (lifecycle.mode === 'playing' && accumulator >= fixedDt) {
     simulation.invulnerable = devSettings.invulnerable;
     const result = simulation.step(input.command(), fixedDt);
     if (result.playerHits > 0) flashDamageVignette();
@@ -370,7 +368,7 @@ function frame(now: number) {
       fpsElapsed = 0;
     }
   }
-  if (mode === 'playing' || mode === 'transition') view.sync(simulation);
+  if (lifecycle.shouldRender()) view.sync(simulation);
   requestAnimationFrame(frame);
 }
 
@@ -383,16 +381,14 @@ function flashDamageVignette() {
 }
 
 function showGameOver() {
-  if (mode !== 'playing') return;
-  mode = 'gameover';
+  if (!lifecycle.gameOver()) return;
   hud.hidden = true;
   gameOverMenu.hidden = false;
   retryButton.focus();
 }
 
 function beginNextLevel() {
-  if (mode !== 'playing') return;
-  mode = 'transition';
+  if (!lifecycle.beginTransition()) return;
   const nextLevel = currentLevelNumber + 1;
   const carry = { health: simulation.player.health, score: simulation.score };
   levelTransitionLabel.textContent = `LEVEL ${nextLevel}`;
