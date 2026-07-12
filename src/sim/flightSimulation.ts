@@ -1,7 +1,8 @@
-import type { EnemyState, FlightStepResult, PlayerCommand, PlayerState, ProjectileState, Vec3 } from './types';
+import type { EnemyState, FlightStepResult, PlayerCommand, PlayerState, ProjectileState } from './types';
 import { railFrameAtDistance, railOffsetPosition, RAIL_SPEED, SECTION_LENGTH, SECTION_SPAN } from './railSystem';
 import { controlEnemy } from './enemyControllers';
 import { createWorld, type WorldRuntime } from '../world/worldSystem';
+import { distanceSquared, sweptSpheresIntersect } from './collision';
 
 const PLAYER_SPEED = 12;
 export const BARREL_ROLL_DURATION = 0.5;
@@ -105,8 +106,7 @@ export class FlightSimulation {
       const radius = shot.radius + enemy.radius;
       const previousShotPosition = previousShotPositions.get(shot.id) ?? shot.position;
       const previousEnemyPosition = previousEnemyPositions.get(enemy.id) ?? enemy.position;
-      if (sweptBoundsOverlap(previousShotPosition, shot.position, previousEnemyPosition, enemy.position, radius)
-        && sweptSpheresIntersect(previousShotPosition, shot.position, previousEnemyPosition, enemy.position, radius)) {
+      if (sweptSpheresIntersect(previousShotPosition, shot.position, previousEnemyPosition, enemy.position, radius)) {
         hitShots.add(shot.id);
         damagedEnemies.add(enemy.id);
         break;
@@ -239,29 +239,6 @@ export class FlightSimulation {
   }
 }
 
-function distanceSquared(a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }) {
-  const dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
-  return dx * dx + dy * dy + dz * dz;
-}
-function sweptBoundsOverlap(shotStart: Vec3, shotEnd: Vec3, enemyStart: Vec3, enemyEnd: Vec3, radius: number) {
-  return axes.every((axis) => Math.min(shotStart[axis], shotEnd[axis]) <= Math.max(enemyStart[axis], enemyEnd[axis]) + radius
-    && Math.max(shotStart[axis], shotEnd[axis]) >= Math.min(enemyStart[axis], enemyEnd[axis]) - radius);
-}
-function sweptSpheresIntersect(shotStart: Vec3, shotEnd: Vec3, enemyStart: Vec3, enemyEnd: Vec3, radius: number) {
-  const start = subtractVec3(shotStart, enemyStart);
-  const movement = subtractVec3(subtractVec3(shotEnd, shotStart), subtractVec3(enemyEnd, enemyStart));
-  const movementSquared = dotVec3(movement, movement);
-  const closestTime = movementSquared === 0 ? 0 : clamp(-dotVec3(start, movement) / movementSquared, 0, 1);
-  const closest = {
-    x: start.x + movement.x * closestTime,
-    y: start.y + movement.y * closestTime,
-    z: start.z + movement.z * closestTime,
-  };
-  return dotVec3(closest, closest) <= radius * radius;
-}
-const axes = ['x', 'y', 'z'] as const;
-function subtractVec3(a: Vec3, b: Vec3): Vec3 { return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z }; }
-function dotVec3(a: Vec3, b: Vec3) { return a.x * b.x + a.y * b.y + a.z * b.z; }
 function clamp(value: number, min: number, max: number) { return Math.max(min, Math.min(max, value)); }
 function moveTowards(value: number, target: number, maxDelta: number) {
   return Math.abs(target - value) <= maxDelta ? target : value + Math.sign(target - value) * maxDelta;
