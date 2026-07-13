@@ -62,7 +62,7 @@ export class FlightSimulation {
 
   constructor(
     options: {
-      health?: number;
+      shield?: number;
       score?: number;
       level?: number;
       world?: WorldRuntime;
@@ -73,7 +73,7 @@ export class FlightSimulation {
       offsetY: 4,
       velocityX: 0,
       velocityY: 0,
-      health: options.health ?? 5,
+      shield: options.shield ?? 5,
       rollDirection: 0,
       rollProgress: 0,
     };
@@ -171,6 +171,8 @@ export class FlightSimulation {
     const previousEnemyPositions = new Map(
       this.enemies.map((enemy) => [enemy.id, { ...enemy.position }]),
     );
+    for (const enemy of this.enemies)
+      enemy.hitFlash = Math.max(0, (enemy.hitFlash ?? 0) - dt * 5);
     for (const shot of this.projectiles) {
       shot.position.x += shot.velocity.x * dt;
       shot.position.y += shot.velocity.y * dt;
@@ -180,9 +182,16 @@ export class FlightSimulation {
 
     const hitShots = new Set<number>();
     const damagedEnemies = new Set<number>();
+    for (const shot of this.projectiles) {
+      if (shot.owner !== "player") continue;
+      const previousShotPosition =
+        previousShotPositions.get(shot.id) ?? shot.position;
+      if (this.world.projectileCollides(previousShotPosition, shot.position))
+        hitShots.add(shot.id);
+    }
     for (const shot of this.projectiles)
       for (const enemy of this.enemies) {
-        if (shot.owner !== "player") continue;
+        if (hitShots.has(shot.id) || shot.owner !== "player") continue;
         const radius = shot.radius + enemy.radius;
         const previousShotPosition =
           previousShotPositions.get(shot.id) ?? shot.position;
@@ -207,6 +216,7 @@ export class FlightSimulation {
     for (const enemy of this.enemies)
       if (damagedEnemies.has(enemy.id)) {
         enemy.health = (enemy.health ?? 1) - 1;
+        enemy.hitFlash = 1;
         if (enemy.health <= 0) {
           killedEnemies.add(enemy.id);
           if (enemy.kind === "boss") result.bossDefeated = true;
@@ -222,6 +232,7 @@ export class FlightSimulation {
     for (const shot of this.projectiles)
       if (
         !isRolling &&
+        !hitShots.has(shot.id) &&
         shot.owner === "enemy" &&
         distanceSquared(shot.position, playerWorld) <= (shot.radius + 0.9) ** 2
       ) {
@@ -230,7 +241,7 @@ export class FlightSimulation {
         damageTaken += shot.damage ?? 1;
       }
     if (!this.invulnerable)
-      this.player.health = Math.max(0, this.player.health - damageTaken);
+      this.player.shield = Math.max(0, this.player.shield - damageTaken);
     removeWhere(
       this.projectiles,
       (shot) =>
@@ -413,6 +424,7 @@ export class FlightSimulation {
       y: playerPosition.y + playerVelocity.y * leadTime * 0.35 + error * 0.35,
       z: playerPosition.z + playerVelocity.z * leadTime * 0.35,
     };
+    if (this.world.lineOfFireBlocked(enemy.position, target)) return;
     const dx = target.x - enemy.position.x,
       dy = target.y - enemy.position.y,
       dz = target.z - enemy.position.z;

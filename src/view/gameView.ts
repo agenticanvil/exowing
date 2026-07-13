@@ -12,6 +12,7 @@ import type { WorldRuntime } from "../world/worldSystem";
 import type { GameAssets } from "../assets/gameAssets";
 import { JetExhaustView } from "./jetExhaustView";
 import { WingtipVortexView } from "./wingtipVortexView";
+import type { Vec3 } from "../sim/types";
 
 const TURN_BANK = THREE.MathUtils.degToRad(20);
 const INPUT_BANK = THREE.MathUtils.degToRad(6);
@@ -23,6 +24,12 @@ const PROJECTILE_AXIS = new THREE.Vector3(0, 1, 0);
 const projectileDirection = new THREE.Vector3();
 const PLAYER_SHOT_COLOR = 0x35f2ff;
 const ENEMY_SHOT_COLOR = 0xff3b32;
+const RETICLE_COLOR = 0x3df8ff;
+const RETICLE_NEAR_DISTANCE = 18;
+const RETICLE_FAR_DISTANCE = 46;
+// Riftmaw is 13.4 units across. This produces a 7.25-unit span, just above the
+// previous scaled guardian's 6.91-unit maximum extent.
+const RIFTMAW_SCALE = 7.25 / 13.4;
 
 export class GameView {
   readonly renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -33,25 +40,19 @@ export class GameView {
   private readonly ship: THREE.Group;
   private readonly jetExhaust: JetExhaustView;
   private readonly wingtipVortices?: WingtipVortexView;
-  private readonly enemyViews = new Map<number, THREE.Mesh>();
+  private readonly enemies: THREE.InstancedMesh;
+  private readonly enemyHit: THREE.InstancedBufferAttribute;
+  private readonly enemyBaseRadius: number;
+  private readonly guardian: THREE.InstancedMesh;
+  private readonly guardianHit: THREE.InstancedBufferAttribute;
   private readonly projectileViews = new Map<number, THREE.Group>();
-  private readonly enemyGeometry = new THREE.SphereGeometry(1.25, 16, 10);
-  private readonly enemyMaterial = new THREE.MeshStandardMaterial({
-    color: 0xf04453,
-    roughness: 0.65,
-  });
-  private readonly bossMaterial = new THREE.MeshStandardMaterial({
-    color: 0x8f1637,
-    emissive: 0x3d0718,
-    emissiveIntensity: 0.8,
-    roughness: 0.42,
-  });
   private readonly shotCoreGeometry = createBoltGeometry(0.085, 2.35, 12);
   private readonly shotGlowGeometry = createBoltGeometry(0.19, 2.9, 12);
   private readonly sky: SkyView;
   private readonly sunLight: THREE.DirectionalLight;
   private readonly flightWindowGuide: THREE.Line;
   private readonly splineGuide: THREE.Line;
+  private readonly reticle: ReturnType<typeof createReticle>;
   private readonly sunDirection: THREE.Vector3;
   private renderScale = 1;
   private previousRenderTime = performance.now() * 0.001;
@@ -109,12 +110,50 @@ export class GameView {
     this.ship = assets?.createPlayer() ?? createPlaceholderShip();
     this.jetExhaust = new JetExhaustView(this.ship);
     this.scene.add(this.ship);
+    const enemySource = assets?.createEnemy() ?? createPlaceholderEnemy();
+    if (Array.isArray(enemySource.material))
+      throw new Error("The Riftspike must use a single merged material.");
+    addInstancedHitFlash(enemySource.material);
+    enemySource.geometry.computeBoundingSphere();
+    this.enemyBaseRadius = enemySource.geometry.boundingSphere?.radius ?? 1;
+    this.enemyHit = new THREE.InstancedBufferAttribute(
+      new Float32Array(256),
+      1,
+    );
+    enemySource.geometry.setAttribute("instanceHit", this.enemyHit);
+    this.enemies = new THREE.InstancedMesh(
+      enemySource.geometry,
+      enemySource.material,
+      256,
+    );
+    this.enemies.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.enemies.count = 0;
+    this.scene.add(this.enemies);
+    const guardianSource = assets?.createGuardian() ?? createPlaceholderEnemy();
+    if (Array.isArray(guardianSource.material))
+      throw new Error("Riftmaw must use a single merged material.");
+    addInstancedHitFlash(guardianSource.material, "riftmaw");
+    this.guardianHit = new THREE.InstancedBufferAttribute(
+      new Float32Array(1),
+      1,
+    );
+    guardianSource.geometry.setAttribute("instanceHit", this.guardianHit);
+    this.guardian = new THREE.InstancedMesh(
+      guardianSource.geometry,
+      guardianSource.material,
+      1,
+    );
+    this.guardian.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.guardian.count = 0;
+    this.scene.add(this.guardian);
     if (environment.atmosphere)
       this.wingtipVortices = new WingtipVortexView(this.scene, this.ship);
 
     this.flightWindowGuide = addFlightWindow(this.scene);
     this.flightWindowGuide.visible = false;
     this.splineGuide = addSplineGuide(this.scene);
+    this.reticle = createReticle();
+    this.scene.add(this.reticle.group);
     window.addEventListener("resize", this.resize);
     this.resize();
   }
@@ -143,13 +182,19 @@ export class GameView {
     );
     this.ship.updateMatrixWorld(true);
     this.wingtipVortices?.update(sim.railSpeed, renderDt);
-    syncEnemyMeshes(
-      this.scene,
-      this.enemyViews,
-      sim.enemies,
-      this.enemyGeometry,
-      this.enemyMaterial,
-      this.bossMaterial,
+    syncEnemyInstances(
+      this.enemies,
+      this.enemyHit,
+      sim.enemies.filter((enemy) => enemy.kind !== "boss"),
+      this.enemyBaseRadius,
+      shipPosition,
+    );
+    syncEnemyInstances(
+      this.guardian,
+      this.guardianHit,
+      sim.enemies.filter((enemy) => enemy.kind === "boss"),
+      3.5 / RIFTMAW_SCALE,
+      shipPosition,
     );
     syncProjectiles(
       this.scene,
@@ -167,7 +212,14 @@ export class GameView {
       railCenter.z - rail.forward.z * cameraDistance,
     );
     this.camera.lookAt(railCenter.x, railCenter.y, railCenter.z);
-    this.sky.update(this.camera.position);
+    const firingOrigin = railOffsetPosition(
+      sim.railDistance + 2,
+      sim.player.offsetX,
+      sim.player.offsetY,
+    );
+    const firingDirection = { x: rail.forward.x, y: 0, z: rail.forward.z };
+    syncReticle(this.reticle, firingOrigin, firingDirection);
+    this.sky.update(this.camera.position, renderTime);
     this.sunLight.target.position.set(railCenter.x, railCenter.y, railCenter.z);
     this.sunLight.position
       .copy(this.sunLight.target.position)
@@ -194,6 +246,10 @@ export class GameView {
     this.fxaaPass.enabled = enabled;
   }
 
+  setReticleVisible(visible: boolean) {
+    this.reticle.group.visible = visible;
+  }
+
   getRenderResolution() {
     return {
       width: Math.round(
@@ -212,20 +268,19 @@ export class GameView {
     disposeObject(this.ship);
     for (const group of this.projectileViews.values())
       disposeObject(group, false);
-    this.enemyGeometry.dispose();
-    this.enemyMaterial.dispose();
-    this.bossMaterial.dispose();
+    disposeObject(this.enemies);
+    disposeObject(this.guardian);
     this.shotCoreGeometry.dispose();
     this.shotGlowGeometry.dispose();
     this.sky.dispose();
     disposeObject(this.flightWindowGuide);
     disposeObject(this.splineGuide);
+    disposeReticle(this.reticle);
     this.composer.dispose();
     this.renderer.renderLists.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
     this.renderer.domElement.remove();
-    this.enemyViews.clear();
     this.projectileViews.clear();
   }
 
@@ -238,6 +293,126 @@ export class GameView {
     this.renderer.setSize(innerWidth, innerHeight);
     this.composer.setSize(innerWidth, innerHeight);
   };
+}
+
+function createReticle() {
+  const textures = [createNearReticleTexture(), createFarReticleTexture()];
+  const group = new THREE.Group();
+  const near = createReticleMarker(textures[0], 3, 0.76);
+  const far = createReticleMarker(textures[1], 3.85, 0.84);
+  near.renderOrder = 1000;
+  far.renderOrder = 999;
+  group.add(near, far);
+  return { group, markers: [near, far] as const, textures };
+}
+
+function createReticleMarker(
+  texture: THREE.Texture,
+  size: number,
+  opacity: number,
+) {
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    color: new THREE.Color(RETICLE_COLOR).multiplyScalar(1.3),
+    transparent: true,
+    opacity,
+    depthTest: false,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  const marker = new THREE.Sprite(material);
+  marker.scale.setScalar(size);
+  return marker;
+}
+
+function createNearReticleTexture() {
+  return createReticleTexture((context) => {
+    const outer = 78;
+    const inner = 42;
+    for (const [horizontal, vertical] of [
+      [-1, -1],
+      [1, -1],
+      [1, 1],
+      [-1, 1],
+    ]) {
+      context.beginPath();
+      context.moveTo(horizontal * inner, vertical * outer);
+      context.lineTo(horizontal * outer, vertical * outer);
+      context.lineTo(horizontal * outer, vertical * inner);
+      context.stroke();
+    }
+  });
+}
+
+function createFarReticleTexture() {
+  return createReticleTexture((context) => {
+    for (let quadrant = 0; quadrant < 4; quadrant++) {
+      const start = quadrant * (Math.PI / 2) + 0.22;
+      const end = start + Math.PI / 2 - 0.54;
+      context.beginPath();
+      context.arc(0, 0, 68, start, end);
+      context.stroke();
+    }
+    context.lineWidth = 6;
+    for (const [x, y] of [
+      [0, -96],
+      [96, 0],
+      [0, 96],
+      [-96, 0],
+    ]) {
+      context.beginPath();
+      context.moveTo(x - (x === 0 ? 0 : Math.sign(x) * 12), y);
+      context.lineTo(x + (x === 0 ? 0 : Math.sign(x) * 4), y);
+      context.moveTo(x, y - (y === 0 ? 0 : Math.sign(y) * 12));
+      context.lineTo(x, y + (y === 0 ? 0 : Math.sign(y) * 4));
+      context.stroke();
+    }
+  });
+}
+
+function createReticleTexture(
+  draw: (context: CanvasRenderingContext2D) => void,
+) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 256;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Unable to create targeting reticle.");
+  context.translate(128, 128);
+  context.strokeStyle = "white";
+  context.lineCap = "square";
+  context.lineJoin = "miter";
+  context.lineWidth = 7;
+  context.shadowColor = "white";
+  context.shadowBlur = 7;
+  draw(context);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function syncReticle(
+  reticle: ReturnType<typeof createReticle>,
+  origin: Vec3,
+  direction: Vec3,
+) {
+  const distances = [RETICLE_NEAR_DISTANCE, RETICLE_FAR_DISTANCE];
+  for (let index = 0; index < reticle.markers.length; index++) {
+    const marker = reticle.markers[index];
+    const distance = distances[index];
+    marker.position.set(
+      origin.x + direction.x * distance,
+      origin.y + direction.y * distance,
+      origin.z + direction.z * distance,
+    );
+  }
+}
+
+function disposeReticle(reticle: ReturnType<typeof createReticle>) {
+  reticle.group.removeFromParent();
+  for (const marker of reticle.markers) marker.material.dispose();
+  for (const texture of reticle.textures) texture.dispose();
 }
 
 function disposeObject(root: THREE.Object3D, disposeGeometry = true) {
@@ -291,6 +466,13 @@ function createPlaceholderShip(): THREE.Group {
   const group = new THREE.Group();
   group.add(mesh);
   return group;
+}
+
+function createPlaceholderEnemy() {
+  return new THREE.Mesh(
+    new THREE.SphereGeometry(1.25, 16, 10),
+    new THREE.MeshStandardMaterial({ color: 0xf04453, roughness: 0.65 }),
+  );
 }
 
 function syncProjectiles(
@@ -393,33 +575,65 @@ function splineTurnStrength(distance: number) {
   return THREE.MathUtils.clamp(headingDelta / FULL_TURN_HEADING_DELTA, -1, 1);
 }
 
-function syncEnemyMeshes(
-  scene: THREE.Scene,
-  views: Map<number, THREE.Mesh>,
+const enemyMatrix = new THREE.Matrix4();
+const enemyPosition = new THREE.Vector3();
+const enemyScale = new THREE.Vector3();
+const enemyRotation = new THREE.Quaternion();
+const enemyLookAt = new THREE.Matrix4();
+const enemyTarget = new THREE.Vector3();
+const enemyUp = new THREE.Vector3(0, 1, 0);
+
+function syncEnemyInstances(
+  mesh: THREE.InstancedMesh,
+  hit: THREE.InstancedBufferAttribute,
   states: FlightSimulation["enemies"],
-  geometry: THREE.BufferGeometry,
-  enemyMaterial: THREE.Material,
-  bossMaterial: THREE.Material,
+  baseRadius: number,
+  playerPosition: { x: number; y: number; z: number },
 ) {
-  const live = new Set(states.map((state) => state.id));
-  for (const [id, mesh] of views)
-    if (!live.has(id)) {
-      scene.remove(mesh);
-      views.delete(id);
-    }
-  for (const state of states) {
-    let mesh = views.get(state.id);
-    if (!mesh) {
-      mesh = new THREE.Mesh(
-        geometry,
-        state.kind === "boss" ? bossMaterial : enemyMaterial,
-      );
-      views.set(state.id, mesh);
-      scene.add(mesh);
-    }
-    mesh.position.set(state.position.x, state.position.y, state.position.z);
-    mesh.scale.setScalar(state.kind === "boss" ? state.radius / 1.25 : 1);
+  if (states.length > mesh.instanceMatrix.count)
+    throw new Error("Riftspike instance capacity exceeded.");
+  mesh.count = states.length;
+  enemyTarget.set(playerPosition.x, playerPosition.y, playerPosition.z);
+  for (let index = 0; index < states.length; index++) {
+    const state = states[index];
+    const scale = state.radius / baseRadius;
+    enemyPosition.set(state.position.x, state.position.y, state.position.z);
+    // The Riftspike's modeled forward direction is -Z. Matrix4.lookAt aligns
+    // that axis with the player while retaining a stable world-up direction.
+    enemyLookAt.lookAt(enemyPosition, enemyTarget, enemyUp);
+    enemyRotation.setFromRotationMatrix(enemyLookAt);
+    enemyScale.setScalar(scale);
+    enemyMatrix.compose(enemyPosition, enemyRotation, enemyScale);
+    mesh.setMatrixAt(index, enemyMatrix);
+    hit.setX(index, state.hitFlash ?? 0);
   }
+  mesh.instanceMatrix.needsUpdate = true;
+  hit.needsUpdate = true;
+  mesh.computeBoundingSphere();
+}
+
+function addInstancedHitFlash(material: THREE.Material, asset = "riftspike") {
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        "#include <common>",
+        "#include <common>\nattribute float instanceHit;\nvarying float vInstanceHit;",
+      )
+      .replace(
+        "#include <begin_vertex>",
+        "#include <begin_vertex>\nvInstanceHit = instanceHit;",
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <common>",
+        "#include <common>\nvarying float vInstanceHit;",
+      )
+      .replace(
+        "#include <opaque_fragment>",
+        "outgoingLight = mix(outgoingLight, vec3(5.0), vInstanceHit);\n#include <opaque_fragment>",
+      );
+  };
+  material.customProgramCacheKey = () => `${asset}-instanced-hit-v1`;
 }
 
 function addFlightWindow(scene: THREE.Scene) {

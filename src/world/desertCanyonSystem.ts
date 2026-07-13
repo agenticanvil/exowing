@@ -131,6 +131,10 @@ export class DesertCanyonSystem implements WorldSystem {
     }
   }
 
+  getCollidableObjects() {
+    return [...this.views.values()];
+  }
+
   dispose() {
     this.ground?.geometry.dispose();
     if (this.ground?.material instanceof THREE.Material)

@@ -13,7 +13,7 @@ export type PlayerState = {
   offsetY: number;
   velocityX: number;
   velocityY: number;
-  health: number;
+  shield: number;
   rollDirection: number;
   rollProgress: number;
 };
@@ -39,6 +39,7 @@ export type EnemyState = {
   kind?: "standard" | "boss";
   health?: number;
   maxHealth?: number;
+  hitFlash?: number;
   exitRailDistance?: number;
   controller?: EnemyControllerId;
   controllerState?: EnemyControllerState;

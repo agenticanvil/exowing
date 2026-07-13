@@ -7,6 +7,7 @@ import { GameView } from "./view/gameView";
 import { loadGameAssets, type AssetLoadProgress } from "./assets/gameAssets";
 import { mountAppShell, requiredElement } from "./ui/appShell";
 import { GameLifecycle } from "./game/gameLifecycle";
+import { performanceRecorder } from "./performance";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("Missing app root");
@@ -97,9 +98,9 @@ app.innerHTML = `
     </div>
   </div>
   <div class="hud" id="hud" hidden>
-    <div class="hud__health">
-      <div class="hud__eyebrow"><span>HULL INTEGRITY</span><span id="health">100%</span></div>
-      <div class="hud__health-track" role="meter" aria-label="Hull integrity" aria-valuemin="0" aria-valuemax="5" aria-valuenow="5"><div class="hud__health-fill" id="health-fill"></div></div>
+    <div class="hud__shield">
+      <div class="hud__eyebrow"><span>SHIELD</span><span id="shield">100%</span></div>
+      <div class="hud__shield-track" role="meter" aria-label="Shield" aria-valuemin="0" aria-valuemax="5" aria-valuenow="5"><div class="hud__shield-fill" id="shield-fill"></div></div>
     </div>
     <div class="hud__score"><span class="hud__score-label">SCORE</span><span class="hud__score-value" id="score">0000</span></div>
     <div class="hud__boss" id="boss-health" hidden>
@@ -111,15 +112,23 @@ app.innerHTML = `
 */
 mountAppShell(app);
 
+if (performanceRecorder.enabled)
+  window.exowingPerformance = {
+    enabled: true,
+    reset: () => performanceRecorder.reset(),
+    summary: () => performanceRecorder.summary(),
+    exportData: () => performanceRecorder.exportData(),
+  };
+
 const initialWorld = createWorld(LEVELS[1].systems);
 let simulation = new FlightSimulation({ world: initialWorld });
 const input = new InputState();
 let currentLevelNumber = 1;
 let view = new GameView(appRoot, LEVELS[1], initialWorld);
 const score = document.querySelector<HTMLSpanElement>("#score");
-const health = requiredElement<HTMLSpanElement>("#health");
-const healthFill = requiredElement<HTMLDivElement>("#health-fill");
-const healthTrack = requiredElement<HTMLDivElement>(".hud__health-track");
+const shield = requiredElement<HTMLSpanElement>("#shield");
+const shieldFill = requiredElement<HTMLDivElement>("#shield-fill");
+const shieldTrack = requiredElement<HTMLDivElement>(".hud__shield-track");
 const damageVignette = requiredElement<HTMLDivElement>("#damage-vignette");
 const levelTransition = requiredElement<HTMLDivElement>("#level-transition");
 const levelTransitionLabel = requiredElement<HTMLSpanElement>(
@@ -154,6 +163,8 @@ const settingsBackButton = requiredElement<HTMLButtonElement>("#settings-back");
 const renderScaleSelect = requiredElement<HTMLSelectElement>("#render-scale");
 const renderResolution = requiredElement<HTMLElement>("#render-resolution");
 const antiAliasingInput = requiredElement<HTMLInputElement>("#anti-aliasing");
+const targetingReticleInput =
+  requiredElement<HTMLInputElement>("#targeting-reticle");
 const controlsBackButton = requiredElement<HTMLButtonElement>("#controls-back");
 const mainMenuButton = requiredElement<HTMLButtonElement>("#main-menu-button");
 const fixedDt = 1 / 60;
@@ -194,7 +205,7 @@ function styleForLevel(levelNumber: number): LevelId {
 
 async function startGame(
   levelNumber = 1,
-  carry?: { health: number; score: number },
+  carry?: { shield: number; score: number },
 ) {
   if (loading) return;
   loading = true;
@@ -221,6 +232,7 @@ async function startGame(
     view = new GameView(appRoot, level, world, assets);
     view.setRenderScale(Number(renderScaleSelect.value));
     view.setAntiAliasing(antiAliasingInput.checked);
+    view.setReticleVisible(targetingReticleInput.checked);
     applyDevSettings();
     lifecycle.startPlaying();
     mainMenu.hidden = true;
@@ -340,10 +352,14 @@ const initialRenderScale = [0.5, 0.75, 1].includes(storedRenderScale)
   : 1;
 const antiAliasingEnabled =
   localStorage.getItem("exowing.antiAliasing") !== "false";
+const targetingReticleEnabled =
+  localStorage.getItem("exowing.targetingReticle") !== "false";
 renderScaleSelect.value = initialRenderScale.toString();
 antiAliasingInput.checked = antiAliasingEnabled;
+targetingReticleInput.checked = targetingReticleEnabled;
 view.setRenderScale(initialRenderScale);
 view.setAntiAliasing(antiAliasingEnabled);
+view.setReticleVisible(targetingReticleEnabled);
 updateRenderResolution();
 renderScaleSelect.addEventListener("change", () => {
   const scale = Number(renderScaleSelect.value);
@@ -366,6 +382,17 @@ antiAliasingInput.addEventListener("change", () => {
     /* Persistence is optional. */
   }
 });
+targetingReticleInput.addEventListener("change", () => {
+  view.setReticleVisible(targetingReticleInput.checked);
+  try {
+    localStorage.setItem(
+      "exowing.targetingReticle",
+      targetingReticleInput.checked.toString(),
+    );
+  } catch {
+    /* Persistence is optional. */
+  }
+});
 window.addEventListener("resize", updateRenderResolution);
 
 if (import.meta.env.DEV) setupDevControls();
@@ -378,28 +405,44 @@ if (requestedLevel) void startGame(requestedLevel);
 else startButton.focus();
 
 function frame(now: number) {
+  performanceRecorder.frame(
+    now,
+    {
+      level: currentLevelNumber,
+      enemies: simulation.enemies.length,
+      projectiles: simulation.projectiles.length,
+      mode: lifecycle.mode,
+    },
+    () => updateFrame(now),
+  );
+  requestAnimationFrame(frame);
+}
+
+function updateFrame(now: number) {
   const frameDt = Math.min((now - previous) / 1000, 0.1);
   accumulator += frameDt;
   previous = now;
-  while (lifecycle.mode === "playing" && accumulator >= fixedDt) {
-    simulation.invulnerable = devSettings.invulnerable;
-    const result = simulation.step(input.command(), fixedDt);
-    if (result.playerHits > 0) flashDamageVignette();
-    if (simulation.player.health <= 0) showGameOver();
-    else if (result.bossDefeated) beginNextLevel();
-    accumulator -= fixedDt;
-  }
+  performanceRecorder.span("simulation.step", () => {
+    while (lifecycle.mode === "playing" && accumulator >= fixedDt) {
+      simulation.invulnerable = devSettings.invulnerable;
+      const result = simulation.step(input.command(), fixedDt);
+      if (result.playerHits > 0) flashDamageVignette();
+      if (simulation.player.shield <= 0) showGameOver();
+      else if (result.bossDefeated) beginNextLevel();
+      accumulator -= fixedDt;
+    }
+  });
   if (score) score.textContent = simulation.score.toString().padStart(4, "0");
-  const healthPercent = (simulation.player.health / 5) * 100;
-  health.textContent = `${Math.round(healthPercent)}%`;
-  healthFill.style.width = `${healthPercent}%`;
-  healthFill.classList.toggle(
-    "hud__health-fill--critical",
-    simulation.player.health <= 2,
+  const shieldPercent = (simulation.player.shield / 5) * 100;
+  shield.textContent = `${Math.round(shieldPercent)}%`;
+  shieldFill.style.width = `${shieldPercent}%`;
+  shieldFill.classList.toggle(
+    "hud__shield-fill--critical",
+    simulation.player.shield <= 2,
   );
-  healthTrack.setAttribute(
+  shieldTrack.setAttribute(
     "aria-valuenow",
-    simulation.player.health.toString(),
+    simulation.player.shield.toString(),
   );
   const boss = simulation.boss;
   const bossEngaged = boss && boss.railDistance - simulation.railDistance < 140;
@@ -421,8 +464,8 @@ function frame(now: number) {
       fpsElapsed = 0;
     }
   }
-  if (lifecycle.shouldRender()) view.sync(simulation);
-  requestAnimationFrame(frame);
+  if (lifecycle.shouldRender())
+    performanceRecorder.span("view.render", () => view.sync(simulation));
 }
 
 requestAnimationFrame(frame);
@@ -443,7 +486,7 @@ function showGameOver() {
 function beginNextLevel() {
   if (!lifecycle.beginTransition()) return;
   const nextLevel = currentLevelNumber + 1;
-  const carry = { health: simulation.player.health, score: simulation.score };
+  const carry = { shield: simulation.player.shield, score: simulation.score };
   levelTransitionLabel.textContent = `LEVEL ${nextLevel}`;
   levelTransition.className = "level-transition level-transition--active";
   window.setTimeout(() => {
@@ -591,6 +634,12 @@ function setupDevControls() {
 
 declare global {
   interface Window {
+    exowingPerformance?: {
+      enabled: boolean;
+      reset: typeof performanceRecorder.reset;
+      summary: typeof performanceRecorder.summary;
+      exportData: typeof performanceRecorder.exportData;
+    };
     exowingDev?: {
       settings: DevSettings;
       set: (name: DevSettingName, enabled?: boolean) => void;

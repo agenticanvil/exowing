@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { FlightSimulation } from "./flightSimulation";
 import { railOffsetPosition, SECTION_LENGTH, SECTION_SPAN } from "./railSystem";
 import type { EnemyState } from "./types";
@@ -40,7 +40,7 @@ describe("FlightSimulation", () => {
       1 / 60,
     );
     expect(result.playerHits).toBe(0);
-    expect(sim.player.health).toBe(5);
+    expect(sim.player.shield).toBe(5);
     expect(sim.player.offsetX).toBeGreaterThan(0);
     expect(sim.player.rollDirection).toBe(1);
 
@@ -50,6 +50,58 @@ describe("FlightSimulation", () => {
     expect(sim.player.offsetX).toBeLessThanOrEqual(14);
     expect(sim.player.rollDirection).toBe(1);
     expect(sim.player.rollProgress).toBe(1);
+  });
+
+  it("checks level geometry for player shots, not active enemy shots", () => {
+    const world = createWorld([]);
+    const collisionCheck = vi
+      .spyOn(world, "projectileCollides")
+      .mockReturnValue(true);
+    const sim = new FlightSimulation({ world });
+    sim.enemies.length = 0;
+    sim.projectiles.length = 0;
+    sim.projectiles.push({
+      id: 9999,
+      position: railOffsetPosition(0, 0, 4),
+      velocity: { x: 0, y: 0, z: 0 },
+      radius: 0.3,
+      owner: "player",
+    });
+
+    sim.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 1 / 60);
+
+    expect(collisionCheck).toHaveBeenCalledOnce();
+    expect(sim.projectiles).toHaveLength(0);
+
+    collisionCheck.mockClear();
+    sim.projectiles.push({
+      id: 9998,
+      position: railOffsetPosition(sim.railDistance, 0, 4),
+      velocity: { x: 0, y: 0, z: 0 },
+      radius: 0.3,
+      owner: "enemy",
+    });
+    const enemyResult = sim.step(
+      { steerX: 0, steerY: 0, fire: false, pace: 0 },
+      1 / 60,
+    );
+    expect(collisionCheck).not.toHaveBeenCalled();
+    expect(enemyResult.playerHits).toBe(1);
+  });
+
+  it("cancels enemy fire when a collidable AABB blocks the firing line", () => {
+    const world = createWorld([]);
+    const lineCheck = vi
+      .spyOn(world, "lineOfFireBlocked")
+      .mockReturnValue(true);
+    const sim = new FlightSimulation({ world });
+    sim.projectiles.length = 0;
+
+    for (let frame = 0; frame < 180; frame++)
+      sim.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 1 / 60);
+
+    expect(lineCheck).toHaveBeenCalled();
+    expect(sim.projectiles.some((shot) => shot.owner === "enemy")).toBe(false);
   });
 
   it("removes a sphere enemy hit by a straight projectile", () => {
@@ -276,6 +328,6 @@ describe("FlightSimulation", () => {
       damage: 1.2,
     });
     second.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 1 / 60);
-    expect(second.player.health).toBeCloseTo(3.8);
+    expect(second.player.shield).toBeCloseTo(3.8);
   });
 });

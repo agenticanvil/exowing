@@ -2,12 +2,13 @@ import { islandField } from "./world/islandSystem";
 import { oceanSurface } from "./world/waterSystem";
 import { desertCanyon } from "./world/desertCanyonSystem";
 import { asteroidBelt } from "./world/asteroidBeltSystem";
+import { alpineSnowfields } from "./world/alpineSnowfieldsSystem";
 import type {
   LevelEnvironment,
   WorldSystemDefinition,
 } from "./world/worldSystem";
 
-export type LevelId = 1 | 2 | 3 | 4;
+export type LevelId = 1 | 2 | 3 | 4 | 5;
 
 export type LevelDefinition = {
   id: LevelId;
@@ -22,6 +23,7 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
     name: "Azure Reach",
     environment: {
       atmosphere: true,
+      wispyClouds: true,
       horizon: 0x9bd8ee,
       zenith: 0x238ed1,
       upperSky: 0x69bde7,
@@ -50,6 +52,7 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
     name: "Tempest Shards",
     environment: {
       atmosphere: true,
+      wispyClouds: true,
       horizon: 0x344954,
       zenith: 0x07131f,
       upperSky: 0x172c3a,
@@ -78,6 +81,7 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
     name: "Sunscar Canyon",
     environment: {
       atmosphere: true,
+      wispyClouds: true,
       horizon: 0xe9a45f,
       zenith: 0x72bdd5,
       upperSky: 0xb8dce2,
@@ -100,6 +104,7 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
     name: "Umbra Belt",
     environment: {
       atmosphere: false,
+      wispyClouds: false,
       horizon: 0x101a2c,
       zenith: 0x010207,
       upperSky: 0x18213b,
@@ -115,6 +120,34 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
     },
     systems: [
       asteroidBelt({ rock: [0x414555, 0x676370, 0x8a6552], dust: 0x77d9df }),
+    ],
+  },
+  5: {
+    id: 5,
+    name: "Frostspire Vale",
+    environment: {
+      atmosphere: true,
+      wispyClouds: true,
+      horizon: 0xcbddeb,
+      zenith: 0x3977ad,
+      upperSky: 0x7fb0d1,
+      sunset: 0xffc8a6,
+      sunDirection: [-0.56, 0.42, 0.7],
+      sunColor: 0xffe5cf,
+      sunIntensity: 2.15,
+      hemisphereSky: 0xe1f3ff,
+      hemisphereGround: 0x52677a,
+      hemisphereIntensity: 2.35,
+      skySunIntensity: 0.68,
+      exposure: 0.9,
+    },
+    systems: [
+      alpineSnowfields({
+        snow: [0xf7fbff, 0xdbe9f4, 0xa9c2d8],
+        rock: [0x253448, 0x42556c, 0x687d91],
+        ice: 0x55bad2,
+        evergreen: 0x173f45,
+      }),
     ],
   },
 };

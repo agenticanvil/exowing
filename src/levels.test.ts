@@ -8,6 +8,7 @@ describe("level definitions", () => {
       name: "Open Space",
       environment: {
         atmosphere: false,
+        wispyClouds: false,
         horizon: 0x02030a,
         zenith: 0x000000,
         upperSky: 0x070b20,
@@ -42,9 +43,25 @@ describe("level definitions", () => {
 
   it("marks the terrestrial levels as atmospheric", () => {
     expect(
-      [LEVELS[1], LEVELS[2], LEVELS[3]].every(
+      [LEVELS[1], LEVELS[2], LEVELS[3], LEVELS[5]].every(
         (level) => level.environment.atmosphere,
       ),
     ).toBe(true);
+  });
+
+  it("lets each level control whether its sky has wispy clouds", () => {
+    expect(
+      [LEVELS[1], LEVELS[2], LEVELS[3], LEVELS[5]].every(
+        (level) => level.environment.wispyClouds,
+      ),
+    ).toBe(true);
+    expect(LEVELS[4].environment.wispyClouds).toBe(false);
+  });
+
+  it("defines the alpine snowfields as a dedicated terrestrial system", () => {
+    const systems = LEVELS[5].systems.map((definition) => definition.create());
+
+    expect(systems.map((system) => system.id)).toEqual(["alpine-snowfields"]);
+    expect(LEVELS[5].environment.atmosphere).toBe(true);
   });
 });

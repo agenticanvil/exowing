@@ -4,6 +4,8 @@ import type { LevelId } from '../levels';
 
 export type GameAssets = {
   createPlayer: () => THREE.Group;
+  createEnemy: () => THREE.Mesh;
+  createGuardian: () => THREE.Mesh;
 };
 
 export type AssetLoadProgress = {
@@ -44,6 +46,15 @@ const playerPlane: ModelAsset = {
   sidecarUrl: new URL('../../assets/player/plane-1/plane-1.asset.json', import.meta.url).href,
 };
 
+const riftspikeUrl = new URL(
+  '../../assets/enemies/riftspike/riftspike.glb',
+  import.meta.url,
+).href;
+const riftmawUrl = new URL(
+  '../../assets/enemies/riftmaw/riftmaw.glb',
+  import.meta.url,
+).href;
+
 // Keep level-only models here. The loader already treats each level as its own
 // bundle, so later levels can load and release different content independently.
 const levelModels: Record<LevelId, readonly ModelAsset[]> = {
@@ -51,30 +62,86 @@ const levelModels: Record<LevelId, readonly ModelAsset[]> = {
   2: [],
   3: [],
   4: [],
+  5: [],
 };
 
 const modelCache = new Map<string, Promise<LoadedModel>>();
+let riftspikeCache: Promise<THREE.Mesh> | undefined;
+let riftmawCache: Promise<THREE.Mesh> | undefined;
 
 export async function loadGameAssets(
   levelId: LevelId,
   onProgress?: (progress: AssetLoadProgress) => void,
 ): Promise<GameAssets> {
   const models = [playerPlane, ...levelModels[levelId]];
+  const totalAssets = models.length + 2;
   const loaded = new Map<string, LoadedModel>();
 
   for (let index = 0; index < models.length; index++) {
     const model = models[index];
-    onProgress?.({ loaded: index, total: models.length, label: `Loading ${model.label}…` });
+    onProgress?.({ loaded: index, total: totalAssets, label: `Loading ${model.label}…` });
     loaded.set(model.key, await loadModel(model));
-    onProgress?.({ loaded: index + 1, total: models.length, label: `${model.label} ready` });
+    onProgress?.({ loaded: index + 1, total: totalAssets, label: `${model.label} ready` });
   }
 
   const player = loaded.get(playerPlane.key);
   if (!player) throw new Error('The player aircraft did not load.');
 
+  onProgress?.({ loaded: models.length, total: totalAssets, label: 'Loading Riftspike…' });
+  const riftspike = await loadRiftspike();
+  onProgress?.({ loaded: models.length + 1, total: totalAssets, label: 'Riftspike ready' });
+  onProgress?.({ loaded: models.length + 1, total: totalAssets, label: 'Loading Riftmaw…' });
+  const riftmaw = await loadRiftmaw();
+  onProgress?.({ loaded: totalAssets, total: totalAssets, label: 'Riftmaw ready' });
+
   return {
     createPlayer: () => createPlayerInstance(player),
+    createEnemy: () => createMeshInstance(riftspike),
+    createGuardian: () => createMeshInstance(riftmaw),
   };
+}
+
+function loadRiftspike(): Promise<THREE.Mesh> {
+  if (riftspikeCache) return riftspikeCache;
+  riftspikeCache = new GLTFLoader().loadAsync(riftspikeUrl).then((gltf) => {
+    let mesh: THREE.Mesh | undefined;
+    gltf.scene.traverse((object) => {
+      if (!mesh && object instanceof THREE.Mesh) mesh = object;
+    });
+    if (!mesh) throw new Error('The Riftspike GLB contains no mesh.');
+    return mesh;
+  }).catch((error: unknown) => {
+    riftspikeCache = undefined;
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Could not load Riftspike: ${detail}`);
+  });
+  return riftspikeCache;
+}
+
+function loadRiftmaw(): Promise<THREE.Mesh> {
+  if (riftmawCache) return riftmawCache;
+  riftmawCache = new GLTFLoader().loadAsync(riftmawUrl).then((gltf) => {
+    let mesh: THREE.Mesh | undefined;
+    gltf.scene.traverse((object) => {
+      if (!mesh && object instanceof THREE.Mesh) mesh = object;
+    });
+    if (!mesh) throw new Error('The Riftmaw GLB contains no mesh.');
+    return mesh;
+  }).catch((error: unknown) => {
+    riftmawCache = undefined;
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Could not load Riftmaw: ${detail}`);
+  });
+  return riftmawCache;
+}
+
+function createMeshInstance(source: THREE.Mesh): THREE.Mesh {
+  return new THREE.Mesh(
+    source.geometry.clone(),
+    Array.isArray(source.material)
+      ? source.material.map((material) => material.clone())
+      : source.material.clone(),
+  );
 }
 
 function loadModel(asset: ModelAsset): Promise<LoadedModel> {

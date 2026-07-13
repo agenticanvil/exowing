@@ -18,6 +18,8 @@ export class SkyView {
         uUpperSkyColor: { value: new THREE.Color(environment.upperSky) },
         uSunsetColor: { value: new THREE.Color(environment.sunset) },
         uSunIntensity: { value: environment.skySunIntensity },
+        uWispyClouds: { value: environment.wispyClouds ? 1 : 0 },
+        uTime: { value: 0 },
       },
       vertexShader: skyVertexShader,
       fragmentShader: skyFragmentShader,
@@ -27,8 +29,9 @@ export class SkyView {
     this.mesh.renderOrder = -100;
   }
 
-  update(cameraPosition: THREE.Vector3) {
+  update(cameraPosition: THREE.Vector3, time = 0) {
     this.mesh.position.copy(cameraPosition);
+    this.mesh.material.uniforms.uTime.value = time;
   }
 
   dispose() {
@@ -53,6 +56,8 @@ const skyFragmentShader = /* glsl */ `
   uniform vec3 uUpperSkyColor;
   uniform vec3 uSunsetColor;
   uniform float uSunIntensity;
+  uniform float uWispyClouds;
+  uniform float uTime;
   varying vec3 vSkyDirection;
 
   float hash21(vec2 point) {
@@ -78,6 +83,16 @@ const skyFragmentShader = /* glsl */ `
       + valueNoise(point * 4.19 - 7.1) * 0.14;
   }
 
+  float wispyClouds(vec2 point) {
+    vec2 wind = vec2(uTime * 0.0026, -uTime * 0.0008);
+    vec2 stretched = vec2(point.x * 0.34, point.y * 1.72) + wind;
+    float warp = cloudNoise(stretched * 0.72 + 8.7) - 0.5;
+    stretched.y += warp * 1.15;
+    float broad = cloudNoise(stretched * 1.15);
+    float threads = cloudNoise(stretched * vec2(2.8, 0.74) + 19.3);
+    return broad * 0.7 + threads * 0.3;
+  }
+
   void main() {
     vec3 direction = normalize(vSkyDirection);
     float elevation = clamp(direction.y, 0.0, 1.0);
@@ -93,10 +108,16 @@ const skyFragmentShader = /* glsl */ `
     float horizonHaze = pow(1.0 - elevation, 9.0);
     sky = mix(sky, uHorizonColor * 1.08, horizonHaze * 0.72);
 
-    vec2 cloudPoint = direction.xz / max(direction.y + 0.22, 0.25) * 0.72;
-    float clouds = cloudNoise(cloudPoint) * 0.66 + cloudNoise(cloudPoint * 2.4 + 11.7) * 0.34;
-    clouds = smoothstep(0.53, 0.72, clouds) * smoothstep(0.03, 0.38, elevation);
-    vec3 cloudColor = mix(uHorizonColor * 1.16, vec3(0.94, 0.96, 0.98), elevation);
+    vec2 cloudPoint = direction.xz / max(direction.y + 0.2, 0.24) * 0.84;
+    float clouds = wispyClouds(cloudPoint);
+    clouds = smoothstep(0.47, 0.66, clouds)
+      * smoothstep(0.015, 0.16, elevation)
+      * (1.0 - smoothstep(0.90, 0.985, sunAlignment))
+      * uWispyClouds;
+    float cloudBody = smoothstep(0.25, 0.92, clouds);
+    vec3 cloudShadow = mix(uUpperSkyColor * 0.62, uHorizonColor * 0.9, elevation);
+    vec3 cloudLight = mix(uHorizonColor * 1.12, vec3(0.96, 0.97, 0.99), elevation);
+    vec3 cloudColor = mix(cloudShadow, cloudLight, cloudBody);
     sky = mix(sky, cloudColor, clouds * 0.68);
 
     float sunHalo = pow(sunAlignment, 72.0);

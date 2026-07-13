@@ -120,6 +120,10 @@ export class AsteroidBeltSystem implements WorldSystem {
     }
   }
 
+  getCollidableObjects() {
+    return [...this.views.values()];
+  }
+
   dispose() {
     for (const view of this.views.values()) disposeGroup(view);
     if (this.stars) {

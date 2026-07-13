@@ -73,6 +73,10 @@ export class IslandSystem implements WorldSystem {
     this.view.sync(this.islands);
   }
 
+  getCollidableObjects() {
+    return this.view.getCollidableObjects();
+  }
+
   getWaterObstacles() {
     return this.islands.map((island) => ({
       x: island.position.x,
@@ -130,6 +134,10 @@ class IslandView {
       mesh.scale.set(island.size.x, island.size.y, island.size.z);
       mesh.rotation.y = island.rotation;
     }
+  }
+
+  getCollidableObjects() {
+    return [...this.views.values()];
   }
 
   dispose() {
