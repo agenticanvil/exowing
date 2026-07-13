@@ -226,7 +226,7 @@ describe("FlightSimulation", () => {
     expect(sim.projectiles.some((shot) => shot.owner === "enemy")).toBe(true);
   });
 
-  it("stops attacking and retreats down the rail without scattering when too close", () => {
+  it("keeps attacking while retreating before a standard enemy gets too close", () => {
     const sim = new FlightSimulation();
     sim.enemies.length = 0;
     sim.projectiles.length = 0;
@@ -240,15 +240,57 @@ describe("FlightSimulation", () => {
       phase: 0,
       sectionIndex: 0,
       controller: "standard",
+      controllerState: {
+        decisionCooldown: 1,
+        fireCooldown: 0,
+        desiredX: 0,
+        desiredY: 0,
+        desiredDepthSpeed: 0,
+      },
     };
     sim.enemies.push(enemy);
     sim.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 1 / 60);
     expect(enemy.scatterVelocity).toBeUndefined();
     expect(enemy.railDistance - sim.railDistance).toBeGreaterThan(13);
-    expect(sim.projectiles.some((shot) => shot.owner === "enemy")).toBe(false);
+    expect(sim.projectiles.some((shot) => shot.owner === "enemy")).toBe(true);
     for (let i = 0; i < 30; i++)
       sim.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 1 / 60);
     expect(sim.enemies).toContain(enemy);
+  });
+
+  it("makes close bosses retreat in quick, varying bursts while firing", () => {
+    const sim = new FlightSimulation();
+    sim.enemies.length = 0;
+    sim.projectiles.length = 0;
+    const boss: EnemyState = {
+      id: 998,
+      position: railOffsetPosition(28, 0, 4),
+      radius: 3.5,
+      railDistance: 28,
+      offsetX: 0,
+      offsetY: 4,
+      phase: 0,
+      sectionIndex: 0,
+      controller: "boss",
+      kind: "boss",
+      controllerState: {
+        decisionCooldown: 0,
+        fireCooldown: 0,
+        desiredX: 0,
+        desiredY: 0,
+        desiredDepthSpeed: 0,
+      },
+    };
+    sim.enemies.push(boss);
+    const startDistance = boss.railDistance - sim.railDistance;
+    const lateralSpeeds = new Set<number>();
+    for (let i = 0; i < 45; i++) {
+      sim.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 1 / 60);
+      lateralSpeeds.add(Math.round((boss.controllerState?.desiredX ?? 0) * 10));
+    }
+    expect(boss.railDistance - sim.railDistance).toBeGreaterThan(startDistance);
+    expect(lateralSpeeds.size).toBeGreaterThan(2);
+    expect(sim.projectiles.some((shot) => shot.owner === "enemy")).toBe(true);
   });
 
   it("requires repeated hits to defeat a boss and reports level completion", () => {

@@ -34,7 +34,7 @@ const BOSS_SHOT_SPEED = 48;
 const WAVE_OFFSET = 130;
 const BOSS_DISTANCE = SECTION_SPAN * 2 + 130;
 const BOSS_HEALTH = 24;
-export const ENEMY_MIN_PLAYER_DISTANCE = 14;
+export const ENEMY_MIN_PLAYER_DISTANCE = 18;
 const ENEMY_RETREAT_SPEED = 32;
 export const FLIGHT_WINDOW = {
   maxX: 14,
@@ -397,14 +397,15 @@ export class FlightSimulation {
       );
       enemy.railDistance +=
         (tooClose
-          ? ENEMY_RETREAT_SPEED
+          ? ENEMY_RETREAT_SPEED +
+            (enemy.kind === "boss" ? Math.max(0, control.depthSpeed) : 0)
           : ENEMY_FORWARD_SPEED + control.depthSpeed) * dt;
       enemy.position = railOffsetPosition(
         enemy.railDistance,
         enemy.offsetX,
         enemy.offsetY,
       );
-      if (!tooClose && control.fire)
+      if (control.fire)
         this.fireEnemyShot(enemy, playerPosition, context.playerVelocity);
     }
   }

@@ -12,6 +12,9 @@ const MIN_Y = 0.8;
 const MAX_Y = 13;
 const STANDARD_MAX_HORIZONTAL_SPEED = 7;
 const STANDARD_MAX_VERTICAL_SPEED = 5;
+const BOSS_CLOSE_DISTANCE = 36;
+const BOSS_MAX_HORIZONTAL_SPEED = 11;
+const BOSS_MAX_VERTICAL_SPEED = 8;
 
 export type EnemyControlContext = {
   elapsed: number;
@@ -70,15 +73,39 @@ function controlBoss(
   context: EnemyControlContext,
   dt: number,
 ): EnemyControl {
+  const distanceAhead = enemy.railDistance - context.playerRailDistance;
+  const close = distanceAhead < BOSS_CLOSE_DISTANCE;
+  state.decisionCooldown -= dt;
   state.fireCooldown -= dt;
-  const fire =
-    state.fireCooldown <= 0 &&
-    enemy.railDistance - context.playerRailDistance > 20;
+  if (state.decisionCooldown <= 0) {
+    const decisionSeed = enemy.id * 0.73 + context.elapsed * 3.17;
+    state.decisionCooldown = close
+      ? 0.12 + Math.abs(signedNoise(decisionSeed)) * 0.16
+      : 0.38 + Math.abs(signedNoise(decisionSeed)) * 0.42;
+    state.desiredX = signedNoise(decisionSeed + 11.3) * (close ? 10 : 5.5);
+    state.desiredY = signedNoise(decisionSeed + 29.7) * (close ? 6.5 : 3.5);
+    state.desiredDepthSpeed = close
+      ? 14 + (signedNoise(decisionSeed + 47.1) + 1) * 7
+      : signedNoise(decisionSeed + 47.1) * 4.5;
+  }
+  const fire = state.fireCooldown <= 0;
   if (fire) state.fireCooldown = 0.62;
+  const edgeX =
+    enemy.offsetX < -MAX_X + 3 ? 7 : enemy.offsetX > MAX_X - 3 ? -7 : 0;
+  const edgeY =
+    enemy.offsetY < MIN_Y + 2 ? 6 : enemy.offsetY > MAX_Y - 2 ? -6 : 0;
   return {
-    offsetVelocityX: Math.sin(context.elapsed * 0.72 + enemy.phase) * 4.2,
-    offsetVelocityY: Math.cos(context.elapsed * 0.91 + enemy.phase) * 2.4,
-    depthSpeed: Math.sin(context.elapsed * 0.4) * 1.5,
+    offsetVelocityX: clamp(
+      state.desiredX + edgeX,
+      -BOSS_MAX_HORIZONTAL_SPEED,
+      BOSS_MAX_HORIZONTAL_SPEED,
+    ),
+    offsetVelocityY: clamp(
+      state.desiredY + edgeY,
+      -BOSS_MAX_VERTICAL_SPEED,
+      BOSS_MAX_VERTICAL_SPEED,
+    ),
+    depthSpeed: state.desiredDepthSpeed,
     fire,
   };
 }
@@ -136,10 +163,8 @@ function controlStandardEnemy(
       Math.sin(context.elapsed * 0.48 + enemy.phase * 1.7) * 3.2;
   }
 
-  const distanceAhead = enemy.railDistance - context.playerRailDistance;
   const fire =
     state.fireCooldown <= 0 &&
-    distanceAhead > 20 &&
     distanceSquared(enemy.position, context.playerPosition) < 125 * 125;
   if (fire) state.fireCooldown = 1.25 + (enemy.id % 6) * 0.17;
   const edgeX =
@@ -177,4 +202,9 @@ function distanceSquared(a: Vec3, b: Vec3) {
 }
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
+}
+
+function signedNoise(seed: number) {
+  const value = Math.sin(seed * 12.9898) * 43758.5453;
+  return (value - Math.floor(value)) * 2 - 1;
 }
