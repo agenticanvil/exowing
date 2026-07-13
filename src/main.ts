@@ -8,6 +8,8 @@ import { loadGameAssets, type AssetLoadProgress } from "./assets/gameAssets";
 import { mountAppShell, requiredElement } from "./ui/appShell";
 import { GameLifecycle } from "./game/gameLifecycle";
 import { performanceRecorder } from "./performance";
+import { createAudioSystem } from "./audio";
+import { FlightAudioFeedback } from "./game/flightAudioFeedback";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("Missing app root");
@@ -123,6 +125,11 @@ if (performanceRecorder.enabled)
 const initialWorld = createWorld(LEVELS[1].systems);
 let simulation = new FlightSimulation({ world: initialWorld });
 const input = new InputState();
+const audio = createAudioSystem();
+const audioFeedback = new FlightAudioFeedback(audio);
+const unlockAudio = () => void audio.resume().catch(() => undefined);
+window.addEventListener("pointerdown", unlockAudio, { once: true });
+window.addEventListener("keydown", unlockAudio, { once: true });
 let currentLevelNumber = 1;
 let view = new GameView(appRoot, LEVELS[1], initialWorld);
 const score = document.querySelector<HTMLSpanElement>("#score");
@@ -212,12 +219,14 @@ async function startGame(
   const isNewRun = !carry;
   showLoading(levelNumber, isNewRun);
   try {
+    const audioLoad = audio.preload();
     const levelId = styleForLevel(levelNumber);
     const assets = await withTimeout(
       loadGameAssets(levelId, updateLoadingProgress),
       60_000,
       "Timed out while loading level assets.",
     );
+    await withTimeout(audioLoad, 20_000, "Timed out while loading audio.");
     loadingStatus.textContent = "Building world…";
     await nextPaint();
     currentLevelNumber = levelNumber;
@@ -426,6 +435,7 @@ function updateFrame(now: number) {
     while (lifecycle.mode === "playing" && accumulator >= fixedDt) {
       simulation.invulnerable = devSettings.invulnerable;
       const result = simulation.step(input.command(), fixedDt);
+      audioFeedback.playStep(result);
       if (result.playerHits > 0) flashDamageVignette();
       if (simulation.player.shield <= 0) showGameOver();
       else if (result.bossDefeated) beginNextLevel();
