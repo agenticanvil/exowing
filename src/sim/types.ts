@@ -45,6 +45,14 @@ export type EnemyState = {
   controllerState?: EnemyControllerState;
   scatterVelocity?: Vec3;
 };
+export type EnemyDestructionState = {
+  id: number;
+  position: Vec3;
+  radius: number;
+  kind: "standard" | "boss";
+  age: number;
+  duration: number;
+};
 export type ProjectileState = {
   id: number;
   position: Vec3;

@@ -13,6 +13,7 @@ import type { GameAssets } from "../assets/gameAssets";
 import { JetExhaustView } from "./jetExhaustView";
 import { WingtipVortexView } from "./wingtipVortexView";
 import type { Vec3 } from "../sim/types";
+import { EnemyDestructionView } from "./enemyDestructionView";
 
 const TURN_BANK = THREE.MathUtils.degToRad(20);
 const INPUT_BANK = THREE.MathUtils.degToRad(6);
@@ -45,6 +46,7 @@ export class GameView {
   private readonly enemyBaseRadius: number;
   private readonly guardian: THREE.InstancedMesh;
   private readonly guardianHit: THREE.InstancedBufferAttribute;
+  private readonly enemyDestructions: EnemyDestructionView;
   private readonly projectileViews = new Map<number, THREE.Group>();
   private readonly shotCoreGeometry = createBoltGeometry(0.085, 2.35, 12);
   private readonly shotGlowGeometry = createBoltGeometry(0.19, 2.9, 12);
@@ -113,6 +115,7 @@ export class GameView {
     const enemySource = assets?.createEnemy() ?? createPlaceholderEnemy();
     if (Array.isArray(enemySource.material))
       throw new Error("The Riftspike must use a single merged material.");
+    const enemyDestructionMaterial = enemySource.material.clone();
     addInstancedHitFlash(enemySource.material);
     enemySource.geometry.computeBoundingSphere();
     this.enemyBaseRadius = enemySource.geometry.boundingSphere?.radius ?? 1;
@@ -132,6 +135,7 @@ export class GameView {
     const guardianSource = assets?.createGuardian() ?? createPlaceholderEnemy();
     if (Array.isArray(guardianSource.material))
       throw new Error("Riftmaw must use a single merged material.");
+    const guardianDestructionMaterial = guardianSource.material.clone();
     addInstancedHitFlash(guardianSource.material, "riftmaw");
     this.guardianHit = new THREE.InstancedBufferAttribute(
       new Float32Array(1),
@@ -146,6 +150,22 @@ export class GameView {
     this.guardian.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.guardian.count = 0;
     this.scene.add(this.guardian);
+    this.enemyDestructions = new EnemyDestructionView(this.scene, {
+      standard: {
+        geometry: enemySource.geometry,
+        material: enemyDestructionMaterial,
+        baseRadius: this.enemyBaseRadius,
+        fragmentCount: 8,
+      },
+      boss: {
+        geometry: guardianSource.geometry,
+        material: guardianDestructionMaterial,
+        baseRadius: 3.5 / RIFTMAW_SCALE,
+        fragmentCount: 12,
+      },
+    });
+    enemyDestructionMaterial.dispose();
+    guardianDestructionMaterial.dispose();
     if (environment.atmosphere)
       this.wingtipVortices = new WingtipVortexView(this.scene, this.ship);
 
@@ -188,6 +208,11 @@ export class GameView {
       sim.enemies.filter((enemy) => enemy.kind !== "boss"),
       this.enemyBaseRadius,
       shipPosition,
+    );
+    this.enemyDestructions.sync(
+      sim.enemyDestructions,
+      shipPosition,
+      Math.min(renderDt, 0.1),
     );
     syncEnemyInstances(
       this.guardian,
@@ -265,6 +290,7 @@ export class GameView {
     window.removeEventListener("resize", this.resize);
     this.world.dispose();
     this.wingtipVortices?.dispose();
+    this.enemyDestructions.dispose();
     disposeObject(this.ship);
     for (const group of this.projectileViews.values())
       disposeObject(group, false);

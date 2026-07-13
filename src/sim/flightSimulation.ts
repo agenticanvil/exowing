@@ -1,4 +1,5 @@
 import type {
+  EnemyDestructionState,
   EnemyState,
   FlightStepResult,
   PlayerCommand,
@@ -34,6 +35,8 @@ const BOSS_SHOT_SPEED = 48;
 const WAVE_OFFSET = 130;
 const BOSS_DISTANCE = SECTION_SPAN * 2 + 130;
 const BOSS_HEALTH = 24;
+export const ENEMY_DESTRUCTION_DURATION = 1.25;
+export const BOSS_DESTRUCTION_DURATION = 1.8;
 export const ENEMY_MIN_PLAYER_DISTANCE = 18;
 const ENEMY_RETREAT_SPEED = 32;
 export const FLIGHT_WINDOW = {
@@ -46,6 +49,7 @@ export const FLIGHT_WINDOW = {
 export class FlightSimulation {
   readonly player: PlayerState;
   readonly enemies: EnemyState[] = [];
+  readonly enemyDestructions: EnemyDestructionState[] = [];
   readonly projectiles: ProjectileState[] = [];
   readonly world: WorldRuntime;
   railDistance = 0;
@@ -110,6 +114,11 @@ export class FlightSimulation {
     );
     this.railDistance += this.railSpeed * dt;
     this.elapsed += dt;
+    for (const destruction of this.enemyDestructions) destruction.age += dt;
+    removeWhere(
+      this.enemyDestructions,
+      (destruction) => destruction.age >= destruction.duration,
+    );
     this.fireCooldown = Math.max(0, this.fireCooldown - dt);
     this.streamCombat();
     this.world.step(this.railDistance);
@@ -219,6 +228,17 @@ export class FlightSimulation {
         enemy.hitFlash = 1;
         if (enemy.health <= 0) {
           killedEnemies.add(enemy.id);
+          this.enemyDestructions.push({
+            id: enemy.id,
+            position: { ...enemy.position },
+            radius: enemy.radius,
+            kind: enemy.kind ?? "standard",
+            age: 0,
+            duration:
+              enemy.kind === "boss"
+                ? BOSS_DESTRUCTION_DURATION
+                : ENEMY_DESTRUCTION_DURATION,
+          });
           if (enemy.kind === "boss") result.bossDefeated = true;
         }
       }
