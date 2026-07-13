@@ -36,4 +36,15 @@ describe("mountAppShell", () => {
       '<div class="setting-row__label"><span>RESOLUTION</span><small id="render-resolution"></small></div>',
     );
   });
+
+  it("nests developer settings and asset scaling under the dev menu", () => {
+    const app = { innerHTML: "" } as HTMLElement;
+
+    mountAppShell(app, true);
+
+    expect(app.innerHTML).toContain(">DEV MENU</button>");
+    expect(app.innerHTML).toContain('id="open-dev-settings"');
+    expect(app.innerHTML).toContain('id="open-asset-scaling"');
+    expect(app.innerHTML).toContain('id="asset-scaling-menu"');
+  });
 });

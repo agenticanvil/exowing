@@ -185,7 +185,7 @@ const fixedDt = 1 / 60;
 let previous = performance.now();
 let accumulator = 0;
 const lifecycle = new GameLifecycle();
-let closeDevSettings: (() => void) | null = null;
+let closeDevOverlay: (() => void) | null = null;
 type DevSettingName =
   "invulnerable" | "showFps" | "showMovementFrame" | "showSpline";
 type DevSettings = Record<DevSettingName, boolean>;
@@ -260,10 +260,12 @@ async function startGame(
     controlsMenu.hidden = true;
     settingsMenu.hidden = true;
     gameOverMenu.hidden = true;
-    const devSettingsMenu =
-      document.querySelector<HTMLDivElement>("#dev-settings-menu");
-    if (devSettingsMenu) devSettingsMenu.hidden = true;
-    closeDevSettings = null;
+    document
+      .querySelectorAll<HTMLElement>(
+        "#dev-menu, #dev-settings-menu, #asset-scaling-menu",
+      )
+      .forEach((menu) => (menu.hidden = true));
+    closeDevOverlay = null;
     hud.hidden = false;
     damageVignette.classList.remove("damage-vignette--active");
     levelTransition.className = "level-transition";
@@ -365,10 +367,11 @@ window.addEventListener("keydown", (event) => {
     closeSettings();
     return;
   }
-  const devSettingsMenu =
-    document.querySelector<HTMLDivElement>("#dev-settings-menu");
-  if (devSettingsMenu && !devSettingsMenu.hidden && closeDevSettings) {
-    closeDevSettings();
+  const devMenuOpen = document.querySelector<HTMLElement>(
+    "#dev-menu:not([hidden]), #dev-settings-menu:not([hidden]), #asset-scaling-menu:not([hidden])",
+  );
+  if (devMenuOpen && closeDevOverlay) {
+    closeDevOverlay();
     return;
   }
   if (lifecycle.mode === "playing") pauseGame();
@@ -607,39 +610,87 @@ async function withTimeout<T>(
 }
 
 function setupDevControls() {
-  const pauseSettingsButton = requiredElement<HTMLButtonElement>(
+  const pauseMenuButton = requiredElement<HTMLButtonElement>(
     "#dev-settings-button",
   );
-  const startSettingsButton = requiredElement<HTMLButtonElement>(
+  const startMenuButton = requiredElement<HTMLButtonElement>(
     "#start-dev-settings-button",
+  );
+  const devMenu = requiredElement<HTMLDivElement>("#dev-menu");
+  const devMenuBack = requiredElement<HTMLButtonElement>("#dev-menu-back");
+  const openSettingsButton =
+    requiredElement<HTMLButtonElement>("#open-dev-settings");
+  const openAssetScalingButton = requiredElement<HTMLButtonElement>(
+    "#open-asset-scaling",
   );
   const settingsMenu = requiredElement<HTMLDivElement>("#dev-settings-menu");
   const backButton = requiredElement<HTMLButtonElement>("#dev-settings-back");
+  const assetScalingMenu = requiredElement<HTMLDivElement>(
+    "#asset-scaling-menu",
+  );
+  const assetScalingBack = requiredElement<HTMLButtonElement>(
+    "#asset-scaling-back",
+  );
   const levelToggle = requiredElement<HTMLButtonElement>("#dev-level-toggle");
   const levelList = requiredElement<HTMLDivElement>("#dev-level-list");
+  let assetScaleTool: { refresh: () => void } | undefined;
+  let closeRootMenu: (() => void) | undefined;
 
-  function openSettings(
+  function openMenu(
     sourceMenu: HTMLDivElement,
     sourceButton: HTMLButtonElement,
   ) {
     sourceMenu.hidden = true;
-    settingsMenu.hidden = false;
-    backButton.focus();
-    closeDevSettings = () => {
-      settingsMenu.hidden = true;
+    devMenu.hidden = false;
+    devMenuBack.focus();
+    closeRootMenu = () => {
+      devMenu.hidden = true;
       sourceMenu.hidden = false;
       sourceButton.focus();
-      closeDevSettings = null;
+      closeDevOverlay = null;
+      closeRootMenu = undefined;
+    };
+    closeDevOverlay = closeRootMenu;
+  }
+
+  function openSubmenu(
+    submenu: HTMLDivElement,
+    sourceButton: HTMLButtonElement,
+    back: HTMLButtonElement,
+  ) {
+    devMenu.hidden = true;
+    submenu.hidden = false;
+    back.focus();
+    closeDevOverlay = () => {
+      submenu.hidden = true;
+      devMenu.hidden = false;
+      sourceButton.focus();
+      closeDevOverlay = closeRootMenu ?? null;
     };
   }
 
-  pauseSettingsButton.addEventListener("click", () =>
-    openSettings(pauseMenu, pauseSettingsButton),
+  pauseMenuButton.addEventListener("click", () =>
+    openMenu(pauseMenu, pauseMenuButton),
   );
-  startSettingsButton.addEventListener("click", () =>
-    openSettings(mainMenu, startSettingsButton),
+  startMenuButton.addEventListener("click", () =>
+    openMenu(mainMenu, startMenuButton),
   );
-  backButton.addEventListener("click", () => closeDevSettings?.());
+  devMenuBack.addEventListener("click", () => closeDevOverlay?.());
+  openSettingsButton.addEventListener("click", () =>
+    openSubmenu(settingsMenu, openSettingsButton, backButton),
+  );
+  openAssetScalingButton.addEventListener("click", () => {
+    openSubmenu(assetScalingMenu, openAssetScalingButton, assetScalingBack);
+    if (assetScaleTool) {
+      assetScaleTool.refresh();
+      return;
+    }
+    void import("./dev/assetScaleTool").then(({ mountAssetScaleTool }) => {
+      assetScaleTool = mountAssetScaleTool();
+    });
+  });
+  backButton.addEventListener("click", () => closeDevOverlay?.());
+  assetScalingBack.addEventListener("click", () => closeDevOverlay?.());
   levelToggle.addEventListener("click", () => {
     levelList.hidden = !levelList.hidden;
     levelToggle.setAttribute("aria-expanded", (!levelList.hidden).toString());
