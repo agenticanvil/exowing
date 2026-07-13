@@ -8,7 +8,7 @@ import { loadGameAssets, type AssetLoadProgress } from "./assets/gameAssets";
 import { mountAppShell, requiredElement } from "./ui/appShell";
 import { GameLifecycle } from "./game/gameLifecycle";
 import { performanceRecorder } from "./performance";
-import { createAudioSystem } from "./audio";
+import { createAudioSystem, DEFAULT_AUDIO_SETTINGS } from "./audio";
 import { FlightAudioFeedback } from "./game/flightAudioFeedback";
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -163,6 +163,9 @@ const pauseMenu = requiredElement<HTMLDivElement>("#pause-menu");
 const controlsMenu = requiredElement<HTMLDivElement>("#controls-menu");
 const settingsMenu = requiredElement<HTMLDivElement>("#settings-menu");
 const startButton = requiredElement<HTMLButtonElement>("#start-button");
+const startSettingsButton = requiredElement<HTMLButtonElement>(
+  "#start-settings-button",
+);
 const continueButton = requiredElement<HTMLButtonElement>("#continue-button");
 const controlsButton = requiredElement<HTMLButtonElement>("#controls-button");
 const settingsButton = requiredElement<HTMLButtonElement>("#settings-button");
@@ -172,6 +175,10 @@ const renderResolution = requiredElement<HTMLElement>("#render-resolution");
 const antiAliasingInput = requiredElement<HTMLInputElement>("#anti-aliasing");
 const targetingReticleInput =
   requiredElement<HTMLInputElement>("#targeting-reticle");
+const masterVolumeInput = requiredElement<HTMLInputElement>("#master-volume");
+const masterVolumeValue = requiredElement<HTMLOutputElement>(
+  "#master-volume-value",
+);
 const controlsBackButton = requiredElement<HTMLButtonElement>("#controls-back");
 const mainMenuButton = requiredElement<HTMLButtonElement>("#main-menu-button");
 const fixedDt = 1 / 60;
@@ -192,6 +199,10 @@ let fpsFrames = 0;
 let fpsElapsed = 0;
 let loading = false;
 let retryLoad: (() => void) | null = null;
+let settingsSource = {
+  menu: pauseMenu,
+  button: settingsButton,
+};
 
 function applyDevSettings() {
   fps.hidden = !devSettings.showFps;
@@ -309,16 +320,20 @@ function updateRenderResolution() {
   renderResolution.textContent = `${resolution.width} × ${resolution.height}`;
 }
 
-function openSettings() {
-  pauseMenu.hidden = true;
+function openSettings(
+  sourceMenu: HTMLDivElement,
+  sourceButton: HTMLButtonElement,
+) {
+  settingsSource = { menu: sourceMenu, button: sourceButton };
+  sourceMenu.hidden = true;
   settingsMenu.hidden = false;
   settingsBackButton.focus();
 }
 
 function closeSettings() {
   settingsMenu.hidden = true;
-  pauseMenu.hidden = false;
-  settingsButton.focus();
+  settingsSource.menu.hidden = false;
+  settingsSource.button.focus();
 }
 
 startButton.addEventListener("click", () => {
@@ -331,7 +346,12 @@ loadingRetry.addEventListener("click", () => retryLoad?.());
 gameOverMainMenuButton.addEventListener("click", returnToMainMenu);
 continueButton.addEventListener("click", continueGame);
 controlsButton.addEventListener("click", openControls);
-settingsButton.addEventListener("click", openSettings);
+startSettingsButton.addEventListener("click", () =>
+  openSettings(mainMenu, startSettingsButton),
+);
+settingsButton.addEventListener("click", () =>
+  openSettings(pauseMenu, settingsButton),
+);
 settingsBackButton.addEventListener("click", closeSettings);
 controlsBackButton.addEventListener("click", closeControls);
 mainMenuButton.addEventListener("click", returnToMainMenu);
@@ -363,9 +383,16 @@ const antiAliasingEnabled =
   localStorage.getItem("exowing.antiAliasing") !== "false";
 const targetingReticleEnabled =
   localStorage.getItem("exowing.targetingReticle") !== "false";
+const storedMasterVolume = localStorage.getItem("exowing.masterVolume");
+const parsedMasterVolume =
+  storedMasterVolume === null ? NaN : Number(storedMasterVolume);
+const initialMasterVolume = Number.isFinite(parsedMasterVolume)
+  ? Math.max(0, Math.min(1, parsedMasterVolume))
+  : DEFAULT_AUDIO_SETTINGS.masterVolume;
 renderScaleSelect.value = initialRenderScale.toString();
 antiAliasingInput.checked = antiAliasingEnabled;
 targetingReticleInput.checked = targetingReticleEnabled;
+applyMasterVolume(initialMasterVolume);
 view.setRenderScale(initialRenderScale);
 view.setAntiAliasing(antiAliasingEnabled);
 view.setReticleVisible(targetingReticleEnabled);
@@ -402,7 +429,27 @@ targetingReticleInput.addEventListener("change", () => {
     /* Persistence is optional. */
   }
 });
+masterVolumeInput.addEventListener("input", () => {
+  applyMasterVolume(Number(masterVolumeInput.value));
+});
+masterVolumeInput.addEventListener("change", () => {
+  try {
+    localStorage.setItem("exowing.masterVolume", masterVolumeInput.value);
+  } catch {
+    /* Persistence is optional. */
+  }
+});
 window.addEventListener("resize", updateRenderResolution);
+
+function applyMasterVolume(volume: number) {
+  const normalized = Math.max(0, Math.min(1, volume));
+  masterVolumeInput.value = normalized.toString();
+  masterVolumeValue.value = `${Math.round(normalized * 100)}%`;
+  audio.applySettings({
+    ...DEFAULT_AUDIO_SETTINGS,
+    masterVolume: normalized,
+  });
+}
 
 if (import.meta.env.DEV) setupDevControls();
 

@@ -218,6 +218,14 @@ canvas {
   text-align: center;
 }
 
+.settings__section-title {
+  margin: 24px 4px 0;
+  color: #83c8ed;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.18em;
+}
+
 .setting-row {
   display: flex;
   align-items: center;
@@ -227,9 +235,13 @@ canvas {
   border-bottom: 1px solid rgb(255 255 255 / 20%);
 }
 
+.setting-row__label {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
 .setting-row small {
-  display: block;
-  margin-top: 5px;
   color: #83c8ed;
 }
 
@@ -255,6 +267,23 @@ canvas {
   width: 20px;
   height: 20px;
   accent-color: #83c8ed;
+}
+
+.setting-volume__control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.setting-volume input {
+  width: 160px;
+  accent-color: #83c8ed;
+}
+
+.setting-volume output {
+  width: 3ch;
+  color: #83c8ed;
+  text-align: right;
 }
 
 .controls {
