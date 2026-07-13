@@ -17,4 +17,6 @@ Assume the development server is already running. Use the existing server for br
 
 For level work, launch the target level with `?play=<id>&dev=invulnerable`, test mid-level play, and use DEV SETTINGS → SWITCH LEVEL for quick comparisons.
 
+Binary assets under `assets/` and generated concept images under `output/imagegen/` are tracked with Git LFS. Before committing or pushing changes that touch LFS-tracked assets (`.glb`, images, or audio), check `git lfs status`, `git lfs ls-files`, and `git diff --stat`. Local commits do not upload LFS objects, but pushing multiple commits containing different versions of the same binary uploads each version. Before any requested push that includes asset changes, remind the user to squash/rebase or use `git reset --soft origin/main` when appropriate so only the intended final asset versions are pushed.
+
 Keep changes focused, follow the existing TypeScript style, and run the relevant tests plus `bun run build` before handing off.
