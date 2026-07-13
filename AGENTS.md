@@ -19,4 +19,17 @@ For level work, launch the target level with `?play=<id>&dev=invulnerable`, test
 
 Binary assets under `assets/` and generated concept images under `output/imagegen/` are tracked with Git LFS. Before committing or pushing changes that touch LFS-tracked assets (`.glb`, images, or audio), check `git lfs status`, `git lfs ls-files`, and `git diff --stat`. Local commits do not upload LFS objects, but pushing multiple commits containing different versions of the same binary uploads each version. Before any requested push that includes asset changes, remind the user to squash/rebase or use `git reset --soft origin/main` when appropriate so only the intended final asset versions are pushed.
 
-Keep changes focused, follow the existing TypeScript style, and run the relevant tests plus `bun run build` before handing off.
+## Verification
+
+Keep changes focused and follow the existing TypeScript style. Before handing off or committing a code change, run `bun run check`. It verifies formatting, linting, tests, typechecking, and the production build.
+
+### Additional verification when relevant or requested
+
+The following checks are conditional; do not run all of them for every task.
+
+- During iteration, use `bun test <path>` for focused feedback, but still run `bun run check` before completion.
+- For gameplay, level, enemy-controller, collision, or balance changes, run `bun run sim` when the simulation covers the changed behavior.
+- For rendering-performance or hot-path changes, run `bun run perf` against the existing development server.
+- For UI, rendering, effects, level presentation, or asset-loading changes, inspect the affected level in the existing development server using `?play=<id>&dev=invulnerable`.
+- Store generated performance reports and screenshots under `tmp/`; do not commit them.
+- If browser or server validation is relevant but unavailable, report that limitation explicitly.
