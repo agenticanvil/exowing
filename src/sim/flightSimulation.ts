@@ -17,11 +17,13 @@ import { controlEnemy } from "./enemyControllers";
 import { createWorld, type WorldRuntime } from "../world/worldSystem";
 import { distanceSquared, sweptSpheresIntersect } from "./collision";
 import { removeWhere } from "../core/collections";
+import type { FlightEventSink } from "../game/flightEvents";
+import { ENEMY_MIN_PLAYER_DISTANCE } from "../game/flightDistances";
 
 const PLAYER_SPEED = 12;
 export const BARREL_ROLL_DURATION = 0.5;
 const BARREL_ROLL_SPEED = 18.5;
-const SHOT_SPEED = 68;
+const SHOT_SPEED = 102;
 const FIRE_INTERVAL = 0.18;
 const SLOW_RAIL_SPEED = 6;
 const FAST_RAIL_SPEED = 25;
@@ -37,7 +39,6 @@ const BOSS_DISTANCE = SECTION_SPAN * 2 + 130;
 const BOSS_HEALTH = 24;
 export const ENEMY_DESTRUCTION_DURATION = 1.25;
 export const BOSS_DESTRUCTION_DURATION = 1.8;
-export const ENEMY_MIN_PLAYER_DISTANCE = 18;
 const ENEMY_RETREAT_SPEED = 32;
 export const FLIGHT_WINDOW = {
   maxX: 14,
@@ -63,6 +64,7 @@ export class FlightSimulation {
   private spawnedWaves = 0;
   private bossSpawned = false;
   private rollTimeRemaining = 0;
+  private readonly events?: FlightEventSink;
 
   constructor(
     options: {
@@ -70,6 +72,7 @@ export class FlightSimulation {
       score?: number;
       level?: number;
       world?: WorldRuntime;
+      events?: FlightEventSink;
     } = {},
   ) {
     this.player = {
@@ -84,6 +87,7 @@ export class FlightSimulation {
     this.score = options.score ?? 0;
     this.difficultyMultiplier = 1.2 ** Math.max(0, (options.level ?? 1) - 1);
     this.world = options.world ?? createWorld([]);
+    this.events = options.events;
     this.streamCombat();
     this.world.step(this.railDistance);
   }
@@ -172,6 +176,7 @@ export class FlightSimulation {
       });
       this.fireCooldown = FIRE_INTERVAL;
       result.shotsFired = 1;
+      this.events?.emit({ type: "player-fired" });
     }
 
     const previousShotPositions = new Map(
@@ -248,6 +253,13 @@ export class FlightSimulation {
       this.player.offsetX,
       this.player.offsetY,
     );
+    for (const enemy of this.enemies)
+      if (killedEnemies.has(enemy.id))
+        this.events?.emit({
+          type: "enemy-exploded",
+          position: { ...enemy.position },
+          listenerPosition: { ...playerWorld },
+        });
     let damageTaken = 0;
     for (const shot of this.projectiles)
       if (

@@ -10,6 +10,7 @@ import { GameLifecycle } from "./game/gameLifecycle";
 import { performanceRecorder } from "./performance";
 import { createAudioSystem, DEFAULT_AUDIO_SETTINGS } from "./audio";
 import { FlightAudioFeedback } from "./game/flightAudioFeedback";
+import { FlightEventBus } from "./game/flightEvents";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("Missing app root");
@@ -123,10 +124,15 @@ if (performanceRecorder.enabled)
   };
 
 const initialWorld = createWorld(LEVELS[1].systems);
-let simulation = new FlightSimulation({ world: initialWorld });
 const input = new InputState();
 const audio = createAudioSystem();
 const audioFeedback = new FlightAudioFeedback(audio);
+const flightEvents = new FlightEventBus();
+flightEvents.subscribe((event) => audioFeedback.handle(event));
+let simulation = new FlightSimulation({
+  world: initialWorld,
+  events: flightEvents,
+});
 const unlockAudio = () => void audio.resume().catch(() => undefined);
 window.addEventListener("pointerdown", unlockAudio, { once: true });
 window.addEventListener("keydown", unlockAudio, { once: true });
@@ -248,6 +254,7 @@ async function startGame(
       ...carry,
       level: currentLevelNumber,
       world,
+      events: flightEvents,
     });
     view = new GameView(appRoot, level, world, assets);
     view.setRenderScale(Number(renderScaleSelect.value));
@@ -485,7 +492,6 @@ function updateFrame(now: number) {
     while (lifecycle.mode === "playing" && accumulator >= fixedDt) {
       simulation.invulnerable = devSettings.invulnerable;
       const result = simulation.step(input.command(), fixedDt);
-      audioFeedback.playStep(result);
       if (result.playerHits > 0) flashDamageVignette();
       if (simulation.player.shield <= 0) showGameOver();
       else if (result.bossDefeated) beginNextLevel();

@@ -13,6 +13,10 @@ import type { GameAssets } from "../assets/gameAssets";
 import { JetExhaustView } from "./jetExhaustView";
 import { WingtipVortexView } from "./wingtipVortexView";
 import type { Vec3 } from "../sim/types";
+import {
+  FLIGHT_FOG_FAR_DISTANCE,
+  FLIGHT_FOG_NEAR_DISTANCE,
+} from "../game/flightDistances";
 import { EnemyDestructionView } from "./enemyDestructionView";
 
 const TURN_BANK = THREE.MathUtils.degToRad(20);
@@ -89,7 +93,11 @@ export class GameView {
     this.composer.addPass(new OutputPass());
     const horizonColor = new THREE.Color(environment.horizon);
     this.scene.background = horizonColor;
-    this.scene.fog = new THREE.Fog(horizonColor, 80, 190);
+    this.scene.fog = new THREE.Fog(
+      horizonColor,
+      FLIGHT_FOG_NEAR_DISTANCE,
+      FLIGHT_FOG_FAR_DISTANCE,
+    );
 
     this.scene.add(
       new THREE.HemisphereLight(

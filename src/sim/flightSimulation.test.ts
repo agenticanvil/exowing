@@ -9,6 +9,19 @@ const islandWorld = () =>
   createWorld([islandField({ style: "weathered", color: 0x8b714d })]);
 
 describe("FlightSimulation", () => {
+  it("fires player projectiles at the configured speed", () => {
+    const sim = new FlightSimulation();
+    sim.projectiles.length = 0;
+
+    sim.step({ steerX: 0, steerY: 0, fire: true, pace: 0 }, 1 / 60);
+
+    const shot = sim.projectiles.find(
+      (projectile) => projectile.owner === "player",
+    );
+    expect(shot).toBeDefined();
+    expect(Math.hypot(shot!.velocity.x, shot!.velocity.z)).toBeCloseTo(102);
+  });
+
   it("moves deterministically and keeps the player inside the flight window", () => {
     const first = new FlightSimulation();
     const second = new FlightSimulation();
@@ -125,7 +138,8 @@ describe("FlightSimulation", () => {
   });
 
   it("keeps a bounded destruction record briefly after a kill", () => {
-    const sim = new FlightSimulation();
+    const emit = vi.fn();
+    const sim = new FlightSimulation({ events: { emit } });
     sim.enemies.length = 0;
     sim.projectiles.length = 0;
     sim.enemies.push({
@@ -154,6 +168,11 @@ describe("FlightSimulation", () => {
     expect(sim.enemyDestructions).toEqual([
       expect.objectContaining({ id: 999, kind: "standard", age: 0 }),
     ]);
+    expect(emit).toHaveBeenCalledWith({
+      type: "enemy-exploded",
+      position: { x: 0, y: 4, z: 0 },
+      listenerPosition: expect.any(Object),
+    });
 
     for (let frame = 0; frame < 90; frame++)
       sim.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 1 / 60);

@@ -1,0 +1,3 @@
+export const FLIGHT_FOG_NEAR_DISTANCE = 80;
+export const FLIGHT_FOG_FAR_DISTANCE = 190;
+export const ENEMY_MIN_PLAYER_DISTANCE = 18;

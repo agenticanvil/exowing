@@ -3,9 +3,18 @@ type SoundUrl = string;
 const SOUND_URLS = {
   "player-fire": new URL("../assets/sfx/player-fire-1.mp3", import.meta.url)
     .href,
+  "explosion-1": new URL("../assets/sfx/explosion-1.mp3", import.meta.url).href,
+  "explosion-2": new URL("../assets/sfx/explosion-2.mp3", import.meta.url).href,
+  "explosion-3": new URL("../assets/sfx/explosion-3.mp3", import.meta.url).href,
 } as const satisfies Record<string, SoundUrl>;
 
 export type SoundId = keyof typeof SOUND_URLS;
+
+export const EXPLOSION_SOUND_IDS = [
+  "explosion-1",
+  "explosion-2",
+  "explosion-3",
+] as const satisfies readonly SoundId[];
 
 export type AudioSettings = {
   muted: boolean;
