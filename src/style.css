@@ -204,12 +204,23 @@ canvas {
   text-align: left;
 }
 
-.dev-settings {
+.dev-settings,
+.dev-level-switcher {
   width: min(420px, calc(100vw - 48px));
   text-align: left;
 }
 
+.dev-menu {
+  width: min(420px, calc(100vw - 48px));
+}
+
+.dev-menu .menu__actions,
+.dev-menu .menu__actions > button {
+  width: 100%;
+}
+
 .dev-menu h1,
+.dev-level-switcher h1,
 .asset-scaling h1 {
   text-align: center;
 }
@@ -434,22 +445,15 @@ canvas {
   accent-color: #83c8ed;
 }
 
-.dev-level-toggle {
-  width: 100%;
-  margin-top: 12px;
-  border-top: 1px solid rgb(255 255 255 / 20%) !important;
-}
-
 .dev-level-list {
   display: grid;
+  box-sizing: border-box;
+  width: 100%;
   gap: 4px;
   padding: 6px 0 0 18px;
   border-left: 1px solid #83c8ed;
 }
 
-.dev-level-list[hidden] {
-  display: none;
-}
 .dev-level-list button {
   width: 100%;
   min-width: 0;

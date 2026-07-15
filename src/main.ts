@@ -276,7 +276,7 @@ async function startGame(
     gameOverMenu.hidden = true;
     document
       .querySelectorAll<HTMLElement>(
-        "#dev-menu, #dev-settings-menu, #asset-scaling-menu",
+        "#dev-menu, #dev-settings-menu, #dev-level-menu, #asset-scaling-menu",
       )
       .forEach((menu) => (menu.hidden = true));
     closeDevOverlay = null;
@@ -389,7 +389,7 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   const devMenuOpen = document.querySelector<HTMLElement>(
-    "#dev-menu:not([hidden]), #dev-settings-menu:not([hidden]), #asset-scaling-menu:not([hidden])",
+    "#dev-menu:not([hidden]), #dev-settings-menu:not([hidden]), #dev-level-menu:not([hidden]), #asset-scaling-menu:not([hidden])",
   );
   if (devMenuOpen && closeDevOverlay) {
     closeDevOverlay();
@@ -640,18 +640,22 @@ function setupDevControls() {
   const devMenuBack = requiredElement<HTMLButtonElement>("#dev-menu-back");
   const openSettingsButton =
     requiredElement<HTMLButtonElement>("#open-dev-settings");
+  const openLevelSwitcherButton = requiredElement<HTMLButtonElement>(
+    "#open-level-switcher",
+  );
   const openAssetScalingButton = requiredElement<HTMLButtonElement>(
     "#open-asset-scaling",
   );
   const settingsMenu = requiredElement<HTMLDivElement>("#dev-settings-menu");
   const backButton = requiredElement<HTMLButtonElement>("#dev-settings-back");
+  const levelMenu = requiredElement<HTMLDivElement>("#dev-level-menu");
+  const levelBack = requiredElement<HTMLButtonElement>("#dev-level-back");
   const assetScalingMenu = requiredElement<HTMLDivElement>(
     "#asset-scaling-menu",
   );
   const assetScalingBack = requiredElement<HTMLButtonElement>(
     "#asset-scaling-back",
   );
-  const levelToggle = requiredElement<HTMLButtonElement>("#dev-level-toggle");
   const levelList = requiredElement<HTMLDivElement>("#dev-level-list");
   let assetScaleTool: { refresh: () => void } | undefined;
   let closeRootMenu: (() => void) | undefined;
@@ -699,6 +703,9 @@ function setupDevControls() {
   openSettingsButton.addEventListener("click", () =>
     openSubmenu(settingsMenu, openSettingsButton, backButton),
   );
+  openLevelSwitcherButton.addEventListener("click", () =>
+    openSubmenu(levelMenu, openLevelSwitcherButton, levelBack),
+  );
   openAssetScalingButton.addEventListener("click", () => {
     openSubmenu(assetScalingMenu, openAssetScalingButton, assetScalingBack);
     if (assetScaleTool) {
@@ -710,18 +717,13 @@ function setupDevControls() {
     });
   });
   backButton.addEventListener("click", () => closeDevOverlay?.());
+  levelBack.addEventListener("click", () => closeDevOverlay?.());
   assetScalingBack.addEventListener("click", () => closeDevOverlay?.());
-  levelToggle.addEventListener("click", () => {
-    levelList.hidden = !levelList.hidden;
-    levelToggle.setAttribute("aria-expanded", (!levelList.hidden).toString());
-  });
   levelList
     .querySelectorAll<HTMLButtonElement>("[data-dev-level]")
     .forEach((button) => {
       button.addEventListener("click", () => {
         const levelId = Number(button.dataset.devLevel) as LevelId;
-        levelList.hidden = true;
-        levelToggle.setAttribute("aria-expanded", "false");
         void startGame(levelId);
       });
     });

@@ -37,13 +37,18 @@ describe("mountAppShell", () => {
     );
   });
 
-  it("nests developer settings and asset scaling under the dev menu", () => {
+  it("puts level switching in its own dev submenu", () => {
     const app = { innerHTML: "" } as HTMLElement;
 
     mountAppShell(app, true);
 
     expect(app.innerHTML).toContain(">DEV MENU</button>");
     expect(app.innerHTML).toContain('id="open-dev-settings"');
+    expect(app.innerHTML.indexOf('id="open-level-switcher"')).toBeLessThan(
+      app.innerHTML.indexOf('id="dev-settings-menu"'),
+    );
+    expect(app.innerHTML).toContain('id="dev-level-menu"');
+    expect(app.innerHTML).toContain('id="dev-level-back"');
     expect(app.innerHTML).toContain('id="open-asset-scaling"');
     expect(app.innerHTML).toContain('id="asset-scaling-menu"');
   });
