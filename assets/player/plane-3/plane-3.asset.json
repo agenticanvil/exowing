@@ -1,0 +1,10 @@
+{
+  "model": {
+    "file": "plane-3.glb",
+    "transform": {
+      "position": [0, 0, 0],
+      "rotationDegrees": [0, 180, 0],
+      "scale": 0.56
+    }
+  }
+}

@@ -3,10 +3,21 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { LevelId } from '../levels';
 
 export type GameAssets = {
-  createPlayer: () => THREE.Group;
+  createPlayer: (modelId?: PlayerModelId) => THREE.Group;
   createEnemy: () => THREE.Mesh;
   createGuardian: () => THREE.Mesh;
 };
+
+export const PLAYER_MODEL_IDS = ['plane-1', 'plane-3'] as const;
+export type PlayerModelId = (typeof PLAYER_MODEL_IDS)[number];
+
+export const PLAYER_EFFECT_SOCKETS = [
+  { name: 'socketexhaustleft', position: [-1.18, 0.47, 2.56] },
+  { name: 'socketexhaustcenter', position: [0, 0.54, 2.62] },
+  { name: 'socketexhaustright', position: [1.18, 0.47, 2.56] },
+  { name: 'socketwingtip-vortexleft', position: [-4.78, 0.34, 0.24] },
+  { name: 'socketwingtip-vortexright', position: [4.78, 0.34, 0.24] },
+] as const;
 
 export type AssetLoadProgress = {
   loaded: number;
@@ -39,11 +50,19 @@ type LoadedModel = {
   transform: AssetTransform;
 };
 
-const playerPlane: ModelAsset = {
-  key: 'player/plane-1',
-  label: 'Player aircraft',
-  modelUrl: new URL('../../assets/player/plane-1/plane-1.glb', import.meta.url).href,
-  sidecarUrl: new URL('../../assets/player/plane-1/plane-1.asset.json', import.meta.url).href,
+const playerPlanes: Record<PlayerModelId, ModelAsset> = {
+  'plane-1': {
+    key: 'player/plane-1',
+    label: 'Player aircraft 1',
+    modelUrl: new URL('../../assets/player/plane-1/plane-1.glb', import.meta.url).href,
+    sidecarUrl: new URL('../../assets/player/plane-1/plane-1.asset.json', import.meta.url).href,
+  },
+  'plane-3': {
+    key: 'player/plane-3',
+    label: 'Player aircraft 3',
+    modelUrl: new URL('../../assets/player/plane-3/plane-3.glb', import.meta.url).href,
+    sidecarUrl: new URL('../../assets/player/plane-3/plane-3.asset.json', import.meta.url).href,
+  },
 };
 
 const riftspikeUrl = new URL(
@@ -73,7 +92,7 @@ export async function loadGameAssets(
   levelId: LevelId,
   onProgress?: (progress: AssetLoadProgress) => void,
 ): Promise<GameAssets> {
-  const models = [playerPlane, ...levelModels[levelId]];
+  const models = [...Object.values(playerPlanes), ...levelModels[levelId]];
   const totalAssets = models.length + 2;
   const loaded = new Map<string, LoadedModel>();
 
@@ -84,8 +103,9 @@ export async function loadGameAssets(
     onProgress?.({ loaded: index + 1, total: totalAssets, label: `${model.label} ready` });
   }
 
-  const player = loaded.get(playerPlane.key);
-  if (!player) throw new Error('The player aircraft did not load.');
+  for (const modelId of PLAYER_MODEL_IDS)
+    if (!loaded.has(playerPlanes[modelId].key))
+      throw new Error(`Player aircraft ${modelId} did not load.`);
 
   onProgress?.({ loaded: models.length, total: totalAssets, label: 'Loading Riftspike…' });
   const riftspike = await loadRiftspike();
@@ -95,7 +115,11 @@ export async function loadGameAssets(
   onProgress?.({ loaded: totalAssets, total: totalAssets, label: 'Riftmaw ready' });
 
   return {
-    createPlayer: () => createPlayerInstance(player),
+    createPlayer: (modelId = 'plane-1') => {
+      const player = loaded.get(playerPlanes[modelId].key);
+      if (!player) throw new Error(`Player aircraft ${modelId} is unavailable.`);
+      return createPlayerInstance(player);
+    },
     createEnemy: () => createMeshInstance(riftspike),
     createGuardian: () => createMeshInstance(riftmaw),
   };
@@ -205,10 +229,31 @@ function createPlayerInstance(asset: LoadedModel): THREE.Group {
   model.position.fromArray(position);
   model.rotation.set(...rotationDegrees.map(THREE.MathUtils.degToRad) as [number, number, number]);
   model.scale.setScalar(scale);
+  addMissingPlayerEffectSockets(model);
 
   // Runtime movement is applied to this outer node. The sidecar transform stays
   // on the model node and is therefore not overwritten by the flight loop.
   const root = new THREE.Group();
   root.add(model);
   return root;
+}
+
+export function addMissingPlayerEffectSockets(model: THREE.Object3D) {
+  const existingNames = new Set<string>();
+  model.traverse((object) => existingNames.add(normalizeName(object.name)));
+  for (const definition of PLAYER_EFFECT_SOCKETS) {
+    if (existingNames.has(normalizeName(definition.name))) continue;
+    const socket = new THREE.Object3D();
+    socket.name = definition.name;
+    socket.position.set(
+      definition.position[0],
+      definition.position[1],
+      definition.position[2],
+    );
+    model.add(socket);
+  }
+}
+
+function normalizeName(name: string) {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, '');
 }

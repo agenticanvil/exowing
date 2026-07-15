@@ -9,7 +9,11 @@ import { FLIGHT_WINDOW, type FlightSimulation } from "../sim/flightSimulation";
 import { railFrameAtDistance, railOffsetPosition } from "../sim/railSystem";
 import { SkyView } from "./skyView";
 import type { WorldRuntime } from "../world/worldSystem";
-import type { GameAssets } from "../assets/gameAssets";
+import {
+  PLAYER_MODEL_IDS,
+  type GameAssets,
+  type PlayerModelId,
+} from "../assets/gameAssets";
 import { JetExhaustView } from "./jetExhaustView";
 import { WingtipVortexView } from "./wingtipVortexView";
 import type { Vec3 } from "../sim/types";
@@ -42,9 +46,12 @@ export class GameView {
   private readonly camera = new THREE.PerspectiveCamera(62, 1, 0.1, 500);
   private readonly composer: EffectComposer;
   private readonly fxaaPass = new FXAAPass();
-  private readonly ship: THREE.Group;
-  private readonly jetExhaust: JetExhaustView;
-  private readonly wingtipVortices?: WingtipVortexView;
+  private readonly ship = new THREE.Group();
+  private readonly playerModels = new Map<PlayerModelId, THREE.Group>();
+  private jetExhaust: JetExhaustView;
+  private wingtipVortices?: WingtipVortexView;
+  private activePlayerModelId: PlayerModelId = "plane-1";
+  private readonly hasAtmosphere: boolean;
   private readonly enemies: THREE.InstancedMesh;
   private readonly enemyHit: THREE.InstancedBufferAttribute;
   private readonly enemyBaseRadius: number;
@@ -70,6 +77,7 @@ export class GameView {
     assets?: GameAssets,
   ) {
     const environment = level.environment;
+    this.hasAtmosphere = environment.atmosphere;
     this.sunDirection = new THREE.Vector3(
       ...environment.sunDirection,
     ).normalize();
@@ -117,8 +125,14 @@ export class GameView {
 
     this.world.attach(this.scene, environment);
 
-    this.ship = assets?.createPlayer() ?? createPlaceholderShip();
-    this.jetExhaust = new JetExhaustView(this.ship);
+    for (const modelId of PLAYER_MODEL_IDS)
+      if (assets) this.playerModels.set(modelId, assets.createPlayer(modelId));
+    if (!assets) this.playerModels.set("plane-1", createPlaceholderShip());
+    const initialPlayer = this.playerModels.get(this.activePlayerModelId);
+    if (!initialPlayer)
+      throw new Error("The default player model is unavailable.");
+    this.ship.add(initialPlayer);
+    this.jetExhaust = new JetExhaustView(initialPlayer);
     this.scene.add(this.ship);
     const enemySource = assets?.createEnemy() ?? createPlaceholderEnemy();
     if (Array.isArray(enemySource.material))
@@ -174,8 +188,8 @@ export class GameView {
     });
     enemyDestructionMaterial.dispose();
     guardianDestructionMaterial.dispose();
-    if (environment.atmosphere)
-      this.wingtipVortices = new WingtipVortexView(this.scene, this.ship);
+    if (this.hasAtmosphere)
+      this.wingtipVortices = new WingtipVortexView(this.scene, initialPlayer);
 
     this.flightWindowGuide = addFlightWindow(this.scene);
     this.flightWindowGuide.visible = false;
@@ -283,6 +297,22 @@ export class GameView {
     this.reticle.group.visible = visible;
   }
 
+  setPlayerModel(modelId: PlayerModelId) {
+    if (modelId === this.activePlayerModelId) return;
+    const model = this.playerModels.get(modelId);
+    if (!model) return;
+
+    this.jetExhaust.dispose();
+    this.wingtipVortices?.dispose();
+    this.ship.clear();
+    this.ship.add(model);
+    this.jetExhaust = new JetExhaustView(model);
+    this.wingtipVortices = this.hasAtmosphere
+      ? new WingtipVortexView(this.scene, model)
+      : undefined;
+    this.activePlayerModelId = modelId;
+  }
+
   getRenderResolution() {
     return {
       width: Math.round(
@@ -297,9 +327,11 @@ export class GameView {
   dispose() {
     window.removeEventListener("resize", this.resize);
     this.world.dispose();
+    this.jetExhaust.dispose();
     this.wingtipVortices?.dispose();
     this.enemyDestructions.dispose();
-    disposeObject(this.ship);
+    for (const model of this.playerModels.values()) disposeObject(model);
+    this.ship.removeFromParent();
     for (const group of this.projectileViews.values())
       disposeObject(group, false);
     disposeObject(this.enemies);

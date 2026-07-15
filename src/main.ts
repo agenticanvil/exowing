@@ -4,12 +4,17 @@ import { LEVEL_IDS, LEVELS, type LevelId } from "./levels";
 import { createWorld } from "./world/worldSystem";
 import { FlightSimulation } from "./sim/flightSimulation";
 import { GameView } from "./view/gameView";
-import { loadGameAssets, type AssetLoadProgress } from "./assets/gameAssets";
+import {
+  loadGameAssets,
+  type AssetLoadProgress,
+  type PlayerModelId,
+} from "./assets/gameAssets";
 import { mountAppShell, requiredElement } from "./ui/appShell";
 import { GameLifecycle } from "./game/gameLifecycle";
 import { performanceRecorder } from "./performance";
 import { createAudioSystem, DEFAULT_AUDIO_SETTINGS } from "./audio";
 import { FlightAudioFeedback } from "./game/flightAudioFeedback";
+import { playerModelForHotkey } from "./input/playerModelHotkeys";
 import { FlightEventBus } from "./game/flightEvents";
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -138,6 +143,7 @@ window.addEventListener("pointerdown", unlockAudio, { once: true });
 window.addEventListener("keydown", unlockAudio, { once: true });
 let currentLevelNumber = 1;
 let view = new GameView(appRoot, LEVELS[1], initialWorld);
+let selectedPlayerModel: PlayerModelId = "plane-1";
 const score = document.querySelector<HTMLSpanElement>("#score");
 const shield = requiredElement<HTMLSpanElement>("#shield");
 const shieldFill = requiredElement<HTMLDivElement>("#shield-fill");
@@ -257,6 +263,7 @@ async function startGame(
       events: flightEvents,
     });
     view = new GameView(appRoot, level, world, assets);
+    view.setPlayerModel(selectedPlayerModel);
     view.setRenderScale(Number(renderScaleSelect.value));
     view.setAntiAliasing(antiAliasingInput.checked);
     view.setReticleVisible(targetingReticleInput.checked);
@@ -365,7 +372,14 @@ settingsBackButton.addEventListener("click", closeSettings);
 controlsBackButton.addEventListener("click", closeControls);
 mainMenuButton.addEventListener("click", returnToMainMenu);
 window.addEventListener("keydown", (event) => {
-  if (event.code !== "Escape" || event.repeat) return;
+  if (event.repeat) return;
+  const playerModel = playerModelForHotkey(event.code);
+  if (playerModel && lifecycle.mode === "playing") {
+    selectedPlayerModel = playerModel;
+    view.setPlayerModel(playerModel);
+    return;
+  }
+  if (event.code !== "Escape") return;
   if (!controlsMenu.hidden) {
     closeControls();
     return;

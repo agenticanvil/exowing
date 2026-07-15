@@ -30,6 +30,14 @@ const ASSETS = [
     rotationY: Math.PI,
   },
   {
+    id: "player/plane-3",
+    label: "PLAYER · PLANE 3",
+    url: new URL("../../assets/player/plane-3/plane-3.glb", import.meta.url)
+      .href,
+    scale: 0.56,
+    rotationY: Math.PI,
+  },
+  {
     id: "enemies/riftspike",
     label: "ENEMY · RIFTSPIKE",
     url: new URL(
@@ -95,7 +103,7 @@ export function mountAssetScaleTool(): { refresh: () => void } {
   const displayed = new THREE.Group();
   scene.add(displayed);
   let grid: THREE.GridHelper | undefined;
-  const slots = ASSETS.map((asset, index) =>
+  const slots = ASSETS.slice(0, 3).map((asset, index) =>
     createSlot(controlsRoot, index, asset.id, asset.scale),
   );
 

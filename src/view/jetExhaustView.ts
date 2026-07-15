@@ -61,6 +61,20 @@ export class JetExhaustView {
       plume.rotation.z = flutter * 0.012;
     });
   }
+
+  dispose() {
+    for (const plume of this.plumes) {
+      plume.traverse((object) => {
+        if (!(object instanceof THREE.Mesh)) return;
+        object.geometry.dispose();
+        if (Array.isArray(object.material))
+          object.material.forEach((material) => material.dispose());
+        else object.material.dispose();
+      });
+      plume.removeFromParent();
+    }
+    this.plumes.length = 0;
+  }
 }
 
 export function exhaustResponse(speed: number, acceleration: number) {
