@@ -82,6 +82,7 @@ const levelModels: Record<LevelId, readonly ModelAsset[]> = {
   3: [],
   4: [],
   5: [],
+  6: [],
 };
 
 const modelCache = new Map<string, Promise<LoadedModel>>();

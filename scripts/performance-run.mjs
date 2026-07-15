@@ -122,14 +122,14 @@ async function runLevel(level) {
 function parseLevels(value) {
   const parsed =
     value === "all"
-      ? [1, 2, 3, 4, 5]
+      ? [1, 2, 3, 4, 5, 6]
       : value.split(",").map((level) => Number(level.trim()));
   if (
     parsed.length === 0 ||
-    parsed.some((level) => !Number.isInteger(level) || level < 1 || level > 5)
+    parsed.some((level) => !Number.isInteger(level) || level < 1 || level > 6)
   )
     throw new Error(
-      `Invalid levels "${value}". Use 1-5, a comma list, or all.`,
+      `Invalid levels "${value}". Use 1-6, a comma list, or all.`,
     );
   return [...new Set(parsed)];
 }

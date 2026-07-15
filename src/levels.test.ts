@@ -43,7 +43,7 @@ describe("level definitions", () => {
 
   it("marks the terrestrial levels as atmospheric", () => {
     expect(
-      [LEVELS[1], LEVELS[2], LEVELS[3], LEVELS[5]].every(
+      [LEVELS[1], LEVELS[2], LEVELS[3], LEVELS[5], LEVELS[6]].every(
         (level) => level.environment.atmosphere,
       ),
     ).toBe(true);
@@ -51,7 +51,7 @@ describe("level definitions", () => {
 
   it("lets each level control whether its sky has wispy clouds", () => {
     expect(
-      [LEVELS[1], LEVELS[2], LEVELS[3], LEVELS[5]].every(
+      [LEVELS[1], LEVELS[2], LEVELS[3], LEVELS[5], LEVELS[6]].every(
         (level) => level.environment.wispyClouds,
       ),
     ).toBe(true);
@@ -63,5 +63,12 @@ describe("level definitions", () => {
 
     expect(systems.map((system) => system.id)).toEqual(["alpine-snowfields"]);
     expect(LEVELS[5].environment.atmosphere).toBe(true);
+  });
+
+  it("defines the boreal forest as a dedicated terrestrial system", () => {
+    const systems = LEVELS[6].systems.map((definition) => definition.create());
+
+    expect(systems.map((system) => system.id)).toEqual(["boreal-forest"]);
+    expect(LEVELS[6].environment.atmosphere).toBe(true);
   });
 });

@@ -3,12 +3,13 @@ import { oceanSurface } from "./world/waterSystem";
 import { desertCanyon } from "./world/desertCanyonSystem";
 import { asteroidBelt } from "./world/asteroidBeltSystem";
 import { alpineSnowfields } from "./world/alpineSnowfieldsSystem";
+import { borealForest } from "./world/borealForestSystem";
 import type {
   LevelEnvironment,
   WorldSystemDefinition,
 } from "./world/worldSystem";
 
-export type LevelId = 1 | 2 | 3 | 4 | 5;
+export type LevelId = 1 | 2 | 3 | 4 | 5 | 6;
 
 export type LevelDefinition = {
   id: LevelId;
@@ -147,6 +148,35 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
         rock: [0x253448, 0x42556c, 0x687d91],
         ice: 0x55bad2,
         evergreen: 0x173f45,
+      }),
+    ],
+  },
+  6: {
+    id: 6,
+    name: "Ironpine Basin",
+    environment: {
+      atmosphere: true,
+      wispyClouds: true,
+      horizon: 0xb5c9c5,
+      zenith: 0x6b93aa,
+      upperSky: 0x9db9c3,
+      sunset: 0xffd29b,
+      sunDirection: [-0.54, 0.38, 0.75],
+      sunColor: 0xffe0ae,
+      sunIntensity: 2.4,
+      hemisphereSky: 0xd7e8e3,
+      hemisphereGround: 0x34472f,
+      hemisphereIntensity: 2.15,
+      skySunIntensity: 0.78,
+      exposure: 0.96,
+    },
+    systems: [
+      borealForest({
+        ground: [0x425426, 0x74883e, 0x9aa052],
+        evergreen: [0x163b32, 0x235343, 0x376c4c],
+        granite: [0x3d4a5c, 0x667387, 0x929eaa],
+        water: 0x2e8f97,
+        earth: 0x4a3424,
       }),
     ],
   },
