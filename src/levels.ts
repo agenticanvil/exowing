@@ -4,6 +4,8 @@ import { desertCanyon } from "./world/desertCanyonSystem";
 import { asteroidBelt } from "./world/asteroidBeltSystem";
 import { alpineSnowfields } from "./world/alpineSnowfieldsSystem";
 import { borealForest } from "./world/borealForestSystem";
+import type { LevelEnemyPlan } from "./enemies";
+import { createStandardEnemyPlan } from "./game/enemyEncounters";
 import type {
   LevelEnvironment,
   WorldSystemDefinition,
@@ -14,6 +16,7 @@ export type LevelId = 1 | 2 | 3 | 4 | 5 | 6;
 export type LevelDefinition = {
   id: LevelId;
   name: string;
+  enemies: LevelEnemyPlan;
   environment: LevelEnvironment;
   systems: readonly WorldSystemDefinition[];
 };
@@ -22,6 +25,7 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
   1: {
     id: 1,
     name: "Azure Reach",
+    enemies: createStandardEnemyPlan("riftspike"),
     environment: {
       atmosphere: true,
       wispyClouds: true,
@@ -51,6 +55,7 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
   2: {
     id: 2,
     name: "Tempest Shards",
+    enemies: createStandardEnemyPlan("riftspike"),
     environment: {
       atmosphere: true,
       wispyClouds: true,
@@ -80,6 +85,7 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
   3: {
     id: 3,
     name: "Sunscar Canyon",
+    enemies: createStandardEnemyPlan("riftspike"),
     environment: {
       atmosphere: true,
       wispyClouds: true,
@@ -103,6 +109,7 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
   4: {
     id: 4,
     name: "Umbra Belt",
+    enemies: createStandardEnemyPlan("riftspike"),
     environment: {
       atmosphere: false,
       wispyClouds: false,
@@ -126,6 +133,7 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
   5: {
     id: 5,
     name: "Frostspire Vale",
+    enemies: createStandardEnemyPlan("riftspike"),
     environment: {
       atmosphere: true,
       wispyClouds: true,
@@ -154,6 +162,7 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
   6: {
     id: 6,
     name: "Ironpine Basin",
+    enemies: createStandardEnemyPlan("thornwing"),
     environment: {
       atmosphere: true,
       wispyClouds: true,

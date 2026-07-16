@@ -22,6 +22,12 @@ import {
   FLIGHT_FOG_NEAR_DISTANCE,
 } from "../game/flightDistances";
 import { EnemyDestructionView } from "./enemyDestructionView";
+import { ENEMIES, enemyIdsForPlan, type EnemyId } from "../enemies";
+import {
+  DEFAULT_GAMEPLAY_CAMERA_FOV,
+  levelIntroCameraPose,
+} from "./levelIntroCamera";
+import { levelOutroPose } from "./levelOutroCamera";
 
 const TURN_BANK = THREE.MathUtils.degToRad(20);
 const INPUT_BANK = THREE.MathUtils.degToRad(6);
@@ -36,14 +42,29 @@ const ENEMY_SHOT_COLOR = 0xff3b32;
 const RETICLE_COLOR = 0x3df8ff;
 const RETICLE_NEAR_DISTANCE = 18;
 const RETICLE_FAR_DISTANCE = 46;
-// Riftmaw is 13.4 units across. This produces a 7.25-unit span, just above the
-// previous scaled guardian's 6.91-unit maximum extent.
-const RIFTMAW_SCALE = 7.25 / 13.4;
+type EnemyInstanceView = {
+  mesh: THREE.InstancedMesh;
+  hit: THREE.InstancedBufferAttribute;
+  baseRadius: number;
+};
+export type GameViewSequence =
+  | { kind: "intro"; progress: number }
+  | {
+      kind: "outro";
+      progress: number;
+      elapsedSeconds: number;
+      durationSeconds: number;
+    };
 
 export class GameView {
   readonly renderer = new THREE.WebGLRenderer({ antialias: true });
   private readonly scene = new THREE.Scene();
-  private readonly camera = new THREE.PerspectiveCamera(62, 1, 0.1, 500);
+  private readonly camera = new THREE.PerspectiveCamera(
+    DEFAULT_GAMEPLAY_CAMERA_FOV,
+    1,
+    0.1,
+    500,
+  );
   private readonly composer: EffectComposer;
   private readonly fxaaPass = new FXAAPass();
   private readonly ship = new THREE.Group();
@@ -52,11 +73,7 @@ export class GameView {
   private wingtipVortices?: WingtipVortexView;
   private activePlayerModelId: PlayerModelId = "plane-1";
   private readonly hasAtmosphere: boolean;
-  private readonly enemies: THREE.InstancedMesh;
-  private readonly enemyHit: THREE.InstancedBufferAttribute;
-  private readonly enemyBaseRadius: number;
-  private readonly guardian: THREE.InstancedMesh;
-  private readonly guardianHit: THREE.InstancedBufferAttribute;
+  private readonly enemyViews = new Map<EnemyId, EnemyInstanceView>();
   private readonly enemyDestructions: EnemyDestructionView;
   private readonly projectileViews = new Map<number, THREE.Group>();
   private readonly shotCoreGeometry = createBoltGeometry(0.085, 2.35, 12);
@@ -134,60 +151,46 @@ export class GameView {
     this.ship.add(initialPlayer);
     this.jetExhaust = new JetExhaustView(initialPlayer);
     this.scene.add(this.ship);
-    const enemySource = assets?.createEnemy() ?? createPlaceholderEnemy();
-    if (Array.isArray(enemySource.material))
-      throw new Error("The Riftspike must use a single merged material.");
-    const enemyDestructionMaterial = enemySource.material.clone();
-    addInstancedHitFlash(enemySource.material);
-    enemySource.geometry.computeBoundingSphere();
-    this.enemyBaseRadius = enemySource.geometry.boundingSphere?.radius ?? 1;
-    this.enemyHit = new THREE.InstancedBufferAttribute(
-      new Float32Array(256),
-      1,
+    const destructionSources = new Map<
+      EnemyId,
+      {
+        geometry: THREE.BufferGeometry;
+        material: THREE.Material;
+        baseRadius: number;
+        fragmentCount: number;
+      }
+    >();
+    for (const enemyId of enemyIdsForPlan(level.enemies)) {
+      const source = assets?.createEnemy(enemyId) ?? createPlaceholderEnemy();
+      if (Array.isArray(source.material))
+        throw new Error(`${ENEMIES[enemyId].label} must use one material.`);
+      const destructionMaterial = source.material.clone();
+      addInstancedHitFlash(source.material, enemyId);
+      source.geometry.computeBoundingSphere();
+      const baseRadius = source.geometry.boundingSphere?.radius ?? 1;
+      const hit = new THREE.InstancedBufferAttribute(new Float32Array(256), 1);
+      source.geometry.setAttribute("instanceHit", hit);
+      const mesh = new THREE.InstancedMesh(
+        source.geometry,
+        source.material,
+        256,
+      );
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      mesh.count = 0;
+      this.enemyViews.set(enemyId, { mesh, hit, baseRadius });
+      this.scene.add(mesh);
+      destructionSources.set(enemyId, {
+        geometry: source.geometry,
+        material: destructionMaterial,
+        baseRadius,
+        fragmentCount: ENEMIES[enemyId].destructionFragments,
+      });
+    }
+    this.enemyDestructions = new EnemyDestructionView(
+      this.scene,
+      destructionSources,
     );
-    enemySource.geometry.setAttribute("instanceHit", this.enemyHit);
-    this.enemies = new THREE.InstancedMesh(
-      enemySource.geometry,
-      enemySource.material,
-      256,
-    );
-    this.enemies.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.enemies.count = 0;
-    this.scene.add(this.enemies);
-    const guardianSource = assets?.createGuardian() ?? createPlaceholderEnemy();
-    if (Array.isArray(guardianSource.material))
-      throw new Error("Riftmaw must use a single merged material.");
-    const guardianDestructionMaterial = guardianSource.material.clone();
-    addInstancedHitFlash(guardianSource.material, "riftmaw");
-    this.guardianHit = new THREE.InstancedBufferAttribute(
-      new Float32Array(1),
-      1,
-    );
-    guardianSource.geometry.setAttribute("instanceHit", this.guardianHit);
-    this.guardian = new THREE.InstancedMesh(
-      guardianSource.geometry,
-      guardianSource.material,
-      1,
-    );
-    this.guardian.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.guardian.count = 0;
-    this.scene.add(this.guardian);
-    this.enemyDestructions = new EnemyDestructionView(this.scene, {
-      standard: {
-        geometry: enemySource.geometry,
-        material: enemyDestructionMaterial,
-        baseRadius: this.enemyBaseRadius,
-        fragmentCount: 8,
-      },
-      boss: {
-        geometry: guardianSource.geometry,
-        material: guardianDestructionMaterial,
-        baseRadius: 3.5 / RIFTMAW_SCALE,
-        fragmentCount: 12,
-      },
-    });
-    enemyDestructionMaterial.dispose();
-    guardianDestructionMaterial.dispose();
+    for (const source of destructionSources.values()) source.material.dispose();
     if (this.hasAtmosphere)
       this.wingtipVortices = new WingtipVortexView(this.scene, initialPlayer);
 
@@ -200,48 +203,70 @@ export class GameView {
     this.resize();
   }
 
-  sync(sim: FlightSimulation) {
+  sync(sim: FlightSimulation, sequence?: GameViewSequence) {
     const renderTime = performance.now() * 0.001;
     const renderDt = renderTime - this.previousRenderTime;
     this.jetExhaust.update(sim.railSpeed, renderDt);
     this.previousRenderTime = renderTime;
     const rail = railFrameAtDistance(sim.railDistance);
-    const shipPosition = railOffsetPosition(
+    const baseShipPosition = railOffsetPosition(
       sim.railDistance,
       sim.player.offsetX,
       sim.player.offsetY,
     );
-    this.ship.position.set(shipPosition.x, shipPosition.y, shipPosition.z);
+    const windowCenterY = (FLIGHT_WINDOW.minY + FLIGHT_WINDOW.maxY) / 2;
+    const cameraDistance = distanceToFrameFlightWindow(
+      this.camera,
+      DEFAULT_GAMEPLAY_CAMERA_FOV,
+    );
+    const railCenter = railOffsetPosition(sim.railDistance, 0, windowCenterY);
+    const gameplayShipPitch = playerPitch(
+      sim.player.offsetY,
+      sim.player.velocityY,
+    );
+    const outroPose =
+      sequence?.kind === "outro"
+        ? levelOutroPose(
+            railCenter,
+            baseShipPosition,
+            rail.forward,
+            rail.right,
+            cameraDistance,
+            gameplayShipPitch,
+            sequence.progress,
+            sequence.elapsedSeconds,
+            sequence.durationSeconds,
+          )
+        : undefined;
+    const renderedShipPosition = outroPose?.shipPosition ?? baseShipPosition;
+    this.ship.position.set(
+      renderedShipPosition.x,
+      renderedShipPosition.y,
+      renderedShipPosition.z,
+    );
     this.ship.rotation.y = -rail.heading;
     const turnBank = splineTurnStrength(sim.railDistance) * TURN_BANK;
     const inputBank = (sim.player.velocityX / 12) * INPUT_BANK;
     const barrelRoll =
       sim.player.rollDirection * sim.player.rollProgress * Math.PI * 2;
-    this.ship.rotation.z = turnBank + inputBank + barrelRoll;
-    this.ship.rotation.x = playerPitch(
-      sim.player.offsetY,
-      sim.player.velocityY,
-    );
+    this.ship.rotation.z =
+      turnBank + inputBank + barrelRoll + (outroPose?.shipRoll ?? 0);
+    this.ship.rotation.x = outroPose?.shipPitch ?? gameplayShipPitch;
     this.ship.updateMatrixWorld(true);
     this.wingtipVortices?.update(sim.railSpeed, renderDt);
-    syncEnemyInstances(
-      this.enemies,
-      this.enemyHit,
-      sim.enemies.filter((enemy) => enemy.kind !== "boss"),
-      this.enemyBaseRadius,
-      shipPosition,
-    );
+    for (const [enemyId, enemyView] of this.enemyViews)
+      syncEnemyInstances(
+        enemyView.mesh,
+        enemyView.hit,
+        sim.enemies.filter((enemy) => enemy.enemyId === enemyId),
+        enemyView.baseRadius,
+        baseShipPosition,
+        ENEMIES[enemyId].label,
+      );
     this.enemyDestructions.sync(
       sim.enemyDestructions,
-      shipPosition,
+      baseShipPosition,
       Math.min(renderDt, 0.1),
-    );
-    syncEnemyInstances(
-      this.guardian,
-      this.guardianHit,
-      sim.enemies.filter((enemy) => enemy.kind === "boss"),
-      3.5 / RIFTMAW_SCALE,
-      shipPosition,
     );
     syncProjectiles(
       this.scene,
@@ -250,15 +275,37 @@ export class GameView {
       this.shotCoreGeometry,
       this.shotGlowGeometry,
     );
-    const windowCenterY = (FLIGHT_WINDOW.minY + FLIGHT_WINDOW.maxY) / 2;
-    const cameraDistance = distanceToFrameFlightWindow(this.camera);
-    const railCenter = railOffsetPosition(sim.railDistance, 0, windowCenterY);
+    const cameraPose =
+      outroPose === undefined
+        ? levelIntroCameraPose(
+            railCenter,
+            baseShipPosition,
+            rail.forward,
+            rail.right,
+            cameraDistance,
+            sequence?.kind === "intro" ? sequence.progress : 1,
+          )
+        : {
+            position: outroPose.cameraPosition,
+            target: outroPose.cameraTarget,
+            fov: outroPose.cameraFov,
+            roll: 0,
+          };
     this.camera.position.set(
-      railCenter.x - rail.forward.x * cameraDistance,
-      railCenter.y,
-      railCenter.z - rail.forward.z * cameraDistance,
+      cameraPose.position.x,
+      cameraPose.position.y,
+      cameraPose.position.z,
     );
-    this.camera.lookAt(railCenter.x, railCenter.y, railCenter.z);
+    if (this.camera.fov !== cameraPose.fov) {
+      this.camera.fov = cameraPose.fov;
+      this.camera.updateProjectionMatrix();
+    }
+    this.camera.lookAt(
+      cameraPose.target.x,
+      cameraPose.target.y,
+      cameraPose.target.z,
+    );
+    this.camera.rotateZ(cameraPose.roll);
     const firingOrigin = railOffsetPosition(
       sim.railDistance + 2,
       sim.player.offsetX,
@@ -282,6 +329,12 @@ export class GameView {
   setDebugVisibility(showMovementFrame: boolean, showSpline: boolean) {
     this.flightWindowGuide.visible = showMovementFrame;
     this.splineGuide.visible = showSpline;
+  }
+
+  setAgXToneMapping(enabled: boolean) {
+    this.renderer.toneMapping = enabled
+      ? THREE.AgXToneMapping
+      : THREE.ACESFilmicToneMapping;
   }
 
   setRenderScale(scale: number) {
@@ -334,8 +387,8 @@ export class GameView {
     this.ship.removeFromParent();
     for (const group of this.projectileViews.values())
       disposeObject(group, false);
-    disposeObject(this.enemies);
-    disposeObject(this.guardian);
+    for (const enemyView of this.enemyViews.values())
+      disposeObject(enemyView.mesh);
     this.shotCoreGeometry.dispose();
     this.shotGlowGeometry.dispose();
     this.sky.dispose();
@@ -655,17 +708,18 @@ function syncEnemyInstances(
   states: FlightSimulation["enemies"],
   baseRadius: number,
   playerPosition: { x: number; y: number; z: number },
+  label: string,
 ) {
   if (states.length > mesh.instanceMatrix.count)
-    throw new Error("Riftspike instance capacity exceeded.");
+    throw new Error(`${label} instance capacity exceeded.`);
   mesh.count = states.length;
   enemyTarget.set(playerPosition.x, playerPosition.y, playerPosition.z);
   for (let index = 0; index < states.length; index++) {
     const state = states[index];
     const scale = state.radius / baseRadius;
     enemyPosition.set(state.position.x, state.position.y, state.position.z);
-    // The Riftspike's modeled forward direction is -Z. Matrix4.lookAt aligns
-    // that axis with the player while retaining a stable world-up direction.
+    // Standard enemies are modeled facing -Z. Matrix4.lookAt aligns that axis
+    // with the player while retaining a stable world-up direction.
     enemyLookAt.lookAt(enemyPosition, enemyTarget, enemyUp);
     enemyRotation.setFromRotationMatrix(enemyLookAt);
     enemyScale.setScalar(scale);
@@ -678,7 +732,7 @@ function syncEnemyInstances(
   mesh.computeBoundingSphere();
 }
 
-function addInstancedHitFlash(material: THREE.Material, asset = "riftspike") {
+function addInstancedHitFlash(material: THREE.Material, asset: EnemyId) {
   material.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
       .replace(
@@ -722,11 +776,14 @@ function addFlightWindow(scene: THREE.Scene) {
   return guide;
 }
 
-function distanceToFrameFlightWindow(camera: THREE.PerspectiveCamera) {
+function distanceToFrameFlightWindow(
+  camera: THREE.PerspectiveCamera,
+  verticalFovDegrees = camera.fov,
+) {
   const paddedHalfWidth = FLIGHT_WINDOW.maxX + FLIGHT_WINDOW.cameraPadding;
   const paddedHalfHeight =
     (FLIGHT_WINDOW.maxY - FLIGHT_WINDOW.minY) / 2 + FLIGHT_WINDOW.cameraPadding;
-  const verticalFov = THREE.MathUtils.degToRad(camera.fov);
+  const verticalFov = THREE.MathUtils.degToRad(verticalFovDegrees);
   const horizontalFov =
     2 * Math.atan(Math.tan(verticalFov / 2) * camera.aspect);
   const verticalDistance = paddedHalfHeight / Math.tan(verticalFov / 2);

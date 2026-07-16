@@ -1,6 +1,7 @@
 import "./style.css";
 import { InputState } from "./input/inputState";
 import { LEVEL_IDS, LEVELS, type LevelId } from "./levels";
+import { ENEMIES, type LevelEnemyPlan } from "./enemies";
 import { createWorld } from "./world/worldSystem";
 import { FlightSimulation } from "./sim/flightSimulation";
 import { GameView } from "./view/gameView";
@@ -15,109 +16,19 @@ import { performanceRecorder } from "./performance";
 import { createAudioSystem, DEFAULT_AUDIO_SETTINGS } from "./audio";
 import { FlightAudioFeedback } from "./game/flightAudioFeedback";
 import { playerModelForHotkey } from "./input/playerModelHotkeys";
+import { installMenuKeyboard } from "./input/menuKeyboard";
 import { FlightEventBus } from "./game/flightEvents";
+import {
+  createLevelStats,
+  recordLevelStep,
+  summarizeLevelStats,
+} from "./game/levelStats";
+import type { GameViewSequence } from "./view/gameView";
+import { createTransitionTourPlan } from "./game/enemyEncounters";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("Missing app root");
 const appRoot = app;
-
-/*
-app.innerHTML = `
-  <div class="menu" id="main-menu">
-    <h1 class="menu__title">EXOWING</h1>
-    <div class="menu__actions">
-      <button id="start-button" type="button">START</button>
-      ${import.meta.env.DEV ? '<button id="start-dev-settings-button" type="button">DEV SETTINGS</button>' : ''}
-    </div>
-  </div>
-  <div class="menu" id="pause-menu" hidden>
-    <h1 class="menu__title">PAUSED</h1>
-    <div class="menu__actions">
-      <button id="continue-button" type="button">CONTINUE</button>
-      <button id="settings-button" type="button">SETTINGS</button>
-      <button id="controls-button" type="button">CONTROLS</button>
-      <button id="main-menu-button" type="button">MAIN MENU</button>
-      ${import.meta.env.DEV ? '<button id="dev-settings-button" type="button">DEV SETTINGS</button>' : ''}
-    </div>
-  </div>
-  <div class="menu" id="settings-menu" hidden>
-    <button class="menu__back" id="settings-back" type="button">BACK</button>
-    <div class="settings">
-      <h1>SETTINGS</h1>
-      <div class="setting-row">
-        <div><span>GRAPHICS</span><small id="render-resolution"></small></div>
-        <select id="render-scale" aria-label="Graphics quality">
-          <option value="0.5">LOW</option>
-          <option value="0.75">MEDIUM</option>
-          <option value="1">HIGH</option>
-        </select>
-      </div>
-      <label class="setting-row setting-toggle">
-        <span>ANTI-ALIASING</span>
-        <input id="anti-aliasing" type="checkbox">
-      </label>
-    </div>
-  </div>
-  <div class="menu" id="controls-menu" hidden>
-    <button class="menu__back" id="controls-back" type="button">BACK</button>
-    <div class="controls">
-      <h1>CONTROLS</h1>
-      <dl>
-        <div><dt>MOVE</dt><dd>W A S D</dd></div>
-        <div><dt>BARREL ROLL / DODGE</dt><dd>Q / E</dd></div>
-        <div><dt>FIRE</dt><dd>SPACE</dd></div>
-        <div><dt>FASTER</dt><dd>SHIFT</dd></div>
-        <div><dt>BRAKE</dt><dd>ALT</dd></div>
-        <div><dt>PAUSE</dt><dd>ESC</dd></div>
-      </dl>
-    </div>
-  </div>
-  ${import.meta.env.DEV ? `
-    <div class="menu" id="dev-settings-menu" hidden>
-      <button class="menu__back" id="dev-settings-back" type="button">BACK</button>
-      <div class="dev-settings">
-        <h1>DEV SETTINGS</h1>
-        <label class="dev-setting">INVULNERABLE <input data-dev-setting="invulnerable" type="checkbox"></label>
-        <label class="dev-setting">SHOW FPS <input data-dev-setting="showFps" type="checkbox"></label>
-        <label class="dev-setting">SHOW MOVEMENT FRAME <input data-dev-setting="showMovementFrame" type="checkbox"></label>
-        <label class="dev-setting">SHOW SPLINE <input data-dev-setting="showSpline" type="checkbox"></label>
-        <button class="dev-level-toggle" id="dev-level-toggle" type="button" aria-expanded="false">SWITCH LEVEL</button>
-        <div class="dev-level-list" id="dev-level-list" hidden>
-          ${LEVEL_IDS.map((id) => `<button type="button" data-dev-level="${id}">${id} · ${LEVELS[id].name.toUpperCase()}</button>`).join('')}
-        </div>
-      </div>
-    </div>` : ''}
-  <div class="damage-vignette" id="damage-vignette" aria-hidden="true"></div>
-  <div class="level-transition" id="level-transition" aria-live="polite"><span id="level-transition-label">LEVEL 1</span></div>
-  <div class="loading-screen" id="loading-screen" hidden aria-live="polite" aria-busy="true">
-    <div class="loading-screen__content">
-      <p class="loading-screen__eyebrow" id="loading-eyebrow">PREPARING SORTIE</p>
-      <h1 id="loading-title">LEVEL 1</h1>
-      <div class="loading-screen__track"><div class="loading-screen__fill" id="loading-fill"></div></div>
-      <p class="loading-screen__status" id="loading-status">Loading…</p>
-      <button id="loading-retry" type="button" hidden>RETRY</button>
-    </div>
-  </div>
-  <div class="menu" id="game-over-menu" hidden>
-    <h1 class="menu__title">GAME OVER</h1>
-    <div class="menu__actions">
-      <button id="retry-button" type="button">RETRY</button>
-      <button id="game-over-main-menu-button" type="button">MAIN MENU</button>
-    </div>
-  </div>
-  <div class="hud" id="hud" hidden>
-    <div class="hud__shield">
-      <div class="hud__eyebrow"><span>SHIELD</span><span id="shield">100%</span></div>
-      <div class="hud__shield-track" role="meter" aria-label="Shield" aria-valuemin="0" aria-valuemax="5" aria-valuenow="5"><div class="hud__shield-fill" id="shield-fill"></div></div>
-    </div>
-    <div class="hud__score"><span class="hud__score-label">SCORE</span><span class="hud__score-value" id="score">0000</span></div>
-    <div class="hud__boss" id="boss-health" hidden>
-      <div class="hud__eyebrow"><span>GUARDIAN</span><span id="boss-health-value">100%</span></div>
-      <div class="hud__boss-track"><div class="hud__boss-fill" id="boss-health-fill"></div></div>
-    </div>
-    <div class="hud__fps" id="fps" hidden>FPS 0</div>
-  </div>`;
-*/
 mountAppShell(app);
 
 if (performanceRecorder.enabled)
@@ -130,11 +41,14 @@ if (performanceRecorder.enabled)
 
 const initialWorld = createWorld(LEVELS[1].systems);
 const input = new InputState();
+input.setEnabled(false);
+installMenuKeyboard();
 const audio = createAudioSystem();
 const audioFeedback = new FlightAudioFeedback(audio);
 const flightEvents = new FlightEventBus();
 flightEvents.subscribe((event) => audioFeedback.handle(event));
 let simulation = new FlightSimulation({
+  enemyPlan: LEVELS[1].enemies,
   world: initialWorld,
   events: flightEvents,
 });
@@ -160,12 +74,41 @@ const loadingTitle = requiredElement<HTMLHeadingElement>("#loading-title");
 const loadingFill = requiredElement<HTMLDivElement>("#loading-fill");
 const loadingStatus = requiredElement<HTMLParagraphElement>("#loading-status");
 const loadingRetry = requiredElement<HTMLButtonElement>("#loading-retry");
+const levelIntro = requiredElement<HTMLElement>("#level-intro");
+const levelIntroEyebrow = requiredElement<HTMLParagraphElement>(
+  "#level-intro-eyebrow",
+);
+const levelIntroTitle =
+  requiredElement<HTMLHeadingElement>("#level-intro-title");
+const levelResults = requiredElement<HTMLElement>("#level-results");
+const levelResultsTitle = requiredElement<HTMLHeadingElement>(
+  "#level-results-title",
+);
+const levelResultsKillPercent = requiredElement<HTMLElement>(
+  "#level-results-kill-percent",
+);
+const levelResultsEnemies = requiredElement<HTMLElement>(
+  "#level-results-enemies",
+);
+const levelResultsAccuracy = requiredElement<HTMLElement>(
+  "#level-results-accuracy",
+);
+const levelResultsShots = requiredElement<HTMLElement>("#level-results-shots");
+const levelResultsDamage = requiredElement<HTMLElement>(
+  "#level-results-damage",
+);
+const levelResultsTime = requiredElement<HTMLElement>("#level-results-time");
+const levelResultsScore = requiredElement<HTMLElement>("#level-results-score");
+const levelResultsContinue = requiredElement<HTMLButtonElement>(
+  "#level-results-continue",
+);
 const gameOverMenu = requiredElement<HTMLDivElement>("#game-over-menu");
 const retryButton = requiredElement<HTMLButtonElement>("#retry-button");
 const gameOverMainMenuButton = requiredElement<HTMLButtonElement>(
   "#game-over-main-menu-button",
 );
 const bossHealth = requiredElement<HTMLDivElement>("#boss-health");
+const bossHealthName = requiredElement<HTMLSpanElement>("#boss-health-name");
 const bossHealthValue = requiredElement<HTMLSpanElement>("#boss-health-value");
 const bossHealthFill = requiredElement<HTMLDivElement>("#boss-health-fill");
 const fps = requiredElement<HTMLDivElement>("#fps");
@@ -194,18 +137,34 @@ const masterVolumeValue = requiredElement<HTMLOutputElement>(
 const controlsBackButton = requiredElement<HTMLButtonElement>("#controls-back");
 const mainMenuButton = requiredElement<HTMLButtonElement>("#main-menu-button");
 const fixedDt = 1 / 60;
+const LEVEL_INTRO_DURATION_MS = 4_200;
+const LEVEL_OUTRO_DURATION_MS = 3_800;
+const REDUCED_MOTION_INTRO_DURATION_MS = 700;
+const REDUCED_MOTION_OUTRO_DURATION_MS = 900;
 let previous = performance.now();
 let accumulator = 0;
+let levelIntroStartedAt: number | null = null;
+let levelOutroStartedAt: number | null = null;
+let levelResultsVisible = false;
+let levelStats = createLevelStats();
+type RunMode = "standard" | "transition-tour";
+let runMode: RunMode = "standard";
+let activeEnemyPlan: LevelEnemyPlan = LEVELS[1].enemies;
 const lifecycle = new GameLifecycle();
 let closeDevOverlay: (() => void) | null = null;
 type DevSettingName =
-  "invulnerable" | "showFps" | "showMovementFrame" | "showSpline";
+  | "invulnerable"
+  | "showFps"
+  | "showMovementFrame"
+  | "showSpline"
+  | "agxToneMapping";
 type DevSettings = Record<DevSettingName, boolean>;
 const devSettings: DevSettings = {
   invulnerable: false,
   showFps: false,
   showMovementFrame: false,
   showSpline: false,
+  agxToneMapping: false,
 };
 let fpsFrames = 0;
 let fpsElapsed = 0;
@@ -215,9 +174,84 @@ let settingsSource = {
   menu: pauseMenu,
   button: settingsButton,
 };
+const MENU_EXIT_DURATION_MS = 320;
+const menuTransitionTimers = new WeakMap<HTMLElement, number>();
+
+function clearMenuTransition(menu: HTMLElement) {
+  const timer = menuTransitionTimers.get(menu);
+  if (timer !== undefined) window.clearTimeout(timer);
+  menuTransitionTimers.delete(menu);
+}
+
+function resetMenuState(menu: HTMLElement) {
+  menu.classList.remove("menu--ancestor", "menu--entering", "menu--leaving");
+  menu.inert = false;
+  menu.removeAttribute("aria-hidden");
+}
+
+function hideMenuImmediately(menu: HTMLElement) {
+  clearMenuTransition(menu);
+  menu.hidden = true;
+  resetMenuState(menu);
+}
+
+function showMenu(menu: HTMLElement) {
+  clearMenuTransition(menu);
+  resetMenuState(menu);
+  menu.hidden = false;
+  menu.classList.add("menu--entering");
+  const timer = window.setTimeout(() => {
+    menu.classList.remove("menu--entering");
+    menuTransitionTimers.delete(menu);
+  }, 440);
+  menuTransitionTimers.set(menu, timer);
+}
+
+function hideMenu(menu: HTMLElement) {
+  if (menu.hidden || menu.classList.contains("menu--leaving")) return;
+  clearMenuTransition(menu);
+  menu.classList.remove("menu--entering");
+  menu.classList.add("menu--leaving");
+  menu.inert = true;
+  const timer = window.setTimeout(() => {
+    menu.hidden = true;
+    resetMenuState(menu);
+    menuTransitionTimers.delete(menu);
+  }, MENU_EXIT_DURATION_MS);
+  menuTransitionTimers.set(menu, timer);
+}
+
+function openMenuChild(
+  parent: HTMLElement,
+  child: HTMLElement,
+  childFocus: HTMLElement,
+) {
+  clearMenuTransition(parent);
+  parent.hidden = false;
+  parent.classList.remove("menu--entering", "menu--leaving");
+  parent.classList.add("menu--ancestor");
+  parent.inert = true;
+  parent.setAttribute("aria-hidden", "true");
+  showMenu(child);
+  childFocus.focus();
+}
+
+function closeMenuChild(
+  child: HTMLElement,
+  parent: HTMLElement,
+  parentFocus: HTMLElement,
+) {
+  if (child.hidden || child.classList.contains("menu--leaving")) return;
+  hideMenu(child);
+  clearMenuTransition(parent);
+  resetMenuState(parent);
+  parent.hidden = false;
+  parentFocus.focus();
+}
 
 function applyDevSettings() {
   fps.hidden = !devSettings.showFps;
+  view.setAgXToneMapping(devSettings.agxToneMapping);
   view.setDebugVisibility(
     devSettings.showMovementFrame,
     devSettings.showSpline,
@@ -233,11 +267,17 @@ function styleForLevel(levelNumber: number): LevelId {
   return LEVEL_IDS[(levelNumber - 1) % LEVEL_IDS.length];
 }
 
+function startRun(levelNumber: LevelId, mode: RunMode = "standard") {
+  runMode = mode;
+  void startGame(levelNumber);
+}
+
 async function startGame(
   levelNumber = 1,
   carry?: { shield: number; score: number },
 ) {
   if (loading) return;
+  input.setEnabled(false);
   loading = true;
   const isNewRun = !carry;
   showLoading(levelNumber, isNewRun);
@@ -250,47 +290,48 @@ async function startGame(
       "Timed out while loading level assets.",
     );
     await withTimeout(audioLoad, 20_000, "Timed out while loading audio.");
-    loadingStatus.textContent = "Building world…";
     await nextPaint();
     currentLevelNumber = levelNumber;
     const level = LEVELS[levelId];
+    activeEnemyPlan =
+      runMode === "transition-tour"
+        ? createTransitionTourPlan(level.enemies)
+        : level.enemies;
     const world = createWorld(level.systems);
     view.dispose();
     simulation = new FlightSimulation({
       ...carry,
       level: currentLevelNumber,
+      enemyPlan: activeEnemyPlan,
+      oneShotEnemies: runMode === "transition-tour",
       world,
       events: flightEvents,
     });
+    levelStats = createLevelStats(simulation.score);
     view = new GameView(appRoot, level, world, assets);
     view.setPlayerModel(selectedPlayerModel);
     view.setRenderScale(Number(renderScaleSelect.value));
     view.setAntiAliasing(antiAliasingInput.checked);
     view.setReticleVisible(targetingReticleInput.checked);
     applyDevSettings();
-    lifecycle.startPlaying();
-    mainMenu.hidden = true;
-    pauseMenu.hidden = true;
-    controlsMenu.hidden = true;
-    settingsMenu.hidden = true;
-    gameOverMenu.hidden = true;
+    lifecycle.startIntro();
     document
-      .querySelectorAll<HTMLElement>(
-        "#dev-menu, #dev-settings-menu, #dev-level-menu, #asset-scaling-menu",
-      )
-      .forEach((menu) => (menu.hidden = true));
+      .querySelectorAll<HTMLElement>(".menu")
+      .forEach(hideMenuImmediately);
     closeDevOverlay = null;
-    hud.hidden = false;
+    hud.hidden = true;
+    showLevelIntro(level, levelNumber);
+    view.setReticleVisible(false);
     damageVignette.classList.remove("damage-vignette--active");
     levelTransition.className = "level-transition";
+    hideLevelResults();
     accumulator = 0;
     previous = performance.now();
     updateRenderResolution();
     hideLoading();
   } catch (error) {
-    showLoadingError(
-      error instanceof Error ? error.message : "Failed to load level assets.",
-    );
+    console.error("Unable to start level", error);
+    showLoadingError();
     retryLoad = () => {
       void startGame(levelNumber, carry);
     };
@@ -301,34 +342,35 @@ async function startGame(
 
 function pauseGame() {
   if (!lifecycle.pause()) return;
-  pauseMenu.hidden = false;
+  input.setEnabled(false);
+  showMenu(pauseMenu);
+  continueButton.focus();
 }
 
 function continueGame() {
   if (!lifecycle.resume()) return;
-  pauseMenu.hidden = true;
+  input.setEnabled(true);
+  hideMenu(pauseMenu);
   accumulator = 0;
 }
 
 function returnToMainMenu() {
   lifecycle.returnToMenu();
-  pauseMenu.hidden = true;
-  mainMenu.hidden = false;
+  input.setEnabled(false);
+  hideLevelIntro();
+  hideLevelResults();
+  document.querySelectorAll<HTMLElement>(".menu").forEach(hideMenuImmediately);
+  showMenu(mainMenu);
   hud.hidden = true;
-  gameOverMenu.hidden = true;
   startButton.focus();
 }
 
 function openControls() {
-  pauseMenu.hidden = true;
-  controlsMenu.hidden = false;
-  controlsBackButton.focus();
+  openMenuChild(pauseMenu, controlsMenu, controlsBackButton);
 }
 
 function closeControls() {
-  controlsMenu.hidden = true;
-  pauseMenu.hidden = false;
-  controlsButton.focus();
+  closeMenuChild(controlsMenu, pauseMenu, controlsButton);
 }
 
 function updateRenderResolution() {
@@ -341,24 +383,21 @@ function openSettings(
   sourceButton: HTMLButtonElement,
 ) {
   settingsSource = { menu: sourceMenu, button: sourceButton };
-  sourceMenu.hidden = true;
-  settingsMenu.hidden = false;
-  settingsBackButton.focus();
+  openMenuChild(sourceMenu, settingsMenu, settingsBackButton);
 }
 
 function closeSettings() {
-  settingsMenu.hidden = true;
-  settingsSource.menu.hidden = false;
-  settingsSource.button.focus();
+  closeMenuChild(settingsMenu, settingsSource.menu, settingsSource.button);
 }
 
 startButton.addEventListener("click", () => {
-  void startGame(1);
+  startRun(1);
 });
 retryButton.addEventListener("click", () => {
-  void startGame(1);
+  startRun(1);
 });
 loadingRetry.addEventListener("click", () => retryLoad?.());
+levelResultsContinue.addEventListener("click", continueAfterLevelResults);
 gameOverMainMenuButton.addEventListener("click", returnToMainMenu);
 continueButton.addEventListener("click", continueGame);
 controlsButton.addEventListener("click", openControls);
@@ -373,6 +412,15 @@ controlsBackButton.addEventListener("click", closeControls);
 mainMenuButton.addEventListener("click", returnToMainMenu);
 window.addEventListener("keydown", (event) => {
   if (event.repeat) return;
+  if (
+    event.code === "Space" &&
+    lifecycle.mode === "outro" &&
+    levelResultsVisible
+  ) {
+    event.preventDefault();
+    continueAfterLevelResults();
+    return;
+  }
   const playerModel = playerModelForHotkey(event.code);
   if (playerModel && lifecycle.mode === "playing") {
     selectedPlayerModel = playerModel;
@@ -477,10 +525,10 @@ function applyMasterVolume(volume: number) {
 
 if (import.meta.env.DEV) setupDevControls();
 
-// Test/development shortcut: ?play=3&dev=invulnerable
-const requestedLevel = levelFromQuery(
-  new URLSearchParams(location.search).get("play"),
-);
+// Test/development shortcuts: ?play=3&dev=invulnerable and ?play=3&preview=outro
+const query = new URLSearchParams(location.search);
+const requestedLevel = levelFromQuery(query.get("play"));
+const previewOutro = import.meta.env.DEV && query.get("preview") === "outro";
 if (requestedLevel) void startGame(requestedLevel);
 else startButton.focus();
 
@@ -504,14 +552,30 @@ function updateFrame(now: number) {
   previous = now;
   performanceRecorder.span("simulation.step", () => {
     while (lifecycle.mode === "playing" && accumulator >= fixedDt) {
-      simulation.invulnerable = devSettings.invulnerable;
+      simulation.invulnerable =
+        runMode === "transition-tour" || devSettings.invulnerable;
+      const shieldBeforeStep = simulation.player.shield;
       const result = simulation.step(input.command(), fixedDt);
+      recordLevelStep(
+        levelStats,
+        result,
+        fixedDt,
+        Math.max(0, shieldBeforeStep - simulation.player.shield),
+      );
       if (result.playerHits > 0) flashDamageVignette();
-      if (simulation.player.shield <= 0) showGameOver();
-      else if (result.bossDefeated) beginNextLevel();
+      if (result.levelComplete) beginLevelOutro();
+      else if (simulation.player.shield <= 0) showGameOver();
       accumulator -= fixedDt;
     }
   });
+  const introProgress = updateLevelIntro(now);
+  const outroProgress = updateLevelOutro(now);
+  const sequence: GameViewSequence | undefined =
+    introProgress !== undefined
+      ? { kind: "intro", progress: introProgress }
+      : outroProgress !== undefined
+        ? { kind: "outro", ...outroProgress }
+        : undefined;
   if (score) score.textContent = simulation.score.toString().padStart(4, "0");
   const shieldPercent = (simulation.player.shield / 5) * 100;
   shield.textContent = `${Math.round(shieldPercent)}%`;
@@ -528,6 +592,7 @@ function updateFrame(now: number) {
   const bossEngaged = boss && boss.railDistance - simulation.railDistance < 140;
   bossHealth.hidden = !bossEngaged;
   if (boss) {
+    bossHealthName.textContent = `GUARDIAN: ${ENEMIES[boss.enemyId].label.toUpperCase()}`;
     const bossPercent = Math.max(
       0,
       ((boss.health ?? 0) / (boss.maxHealth ?? 1)) * 100,
@@ -545,7 +610,9 @@ function updateFrame(now: number) {
     }
   }
   if (lifecycle.shouldRender())
-    performanceRecorder.span("view.render", () => view.sync(simulation));
+    performanceRecorder.span("view.render", () =>
+      view.sync(simulation, sequence),
+    );
 }
 
 requestAnimationFrame(frame);
@@ -558,31 +625,155 @@ function flashDamageVignette() {
 
 function showGameOver() {
   if (!lifecycle.gameOver()) return;
+  input.setEnabled(false);
   hud.hidden = true;
-  gameOverMenu.hidden = false;
+  showMenu(gameOverMenu);
   retryButton.focus();
 }
 
-function beginNextLevel() {
-  if (!lifecycle.beginTransition()) return;
+function showLevelIntro(level: (typeof LEVELS)[LevelId], levelNumber: number) {
+  levelIntroEyebrow.textContent = `LEVEL ${levelNumber.toString().padStart(2, "0")}`;
+  levelIntroTitle.textContent = level.name.toUpperCase();
+  levelIntro.hidden = false;
+  levelIntro.classList.remove("level-intro--active");
+  void levelIntro.offsetWidth;
+  levelIntro.classList.add("level-intro--active");
+  levelIntroStartedAt = performance.now();
+}
+
+function updateLevelIntro(now: number): number | undefined {
+  if (lifecycle.mode !== "intro" || levelIntroStartedAt === null)
+    return undefined;
+  const duration = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ? REDUCED_MOTION_INTRO_DURATION_MS
+    : LEVEL_INTRO_DURATION_MS;
+  const progress = Math.min(1, (now - levelIntroStartedAt) / duration);
+  if (progress < 1) return progress;
+
+  lifecycle.finishIntro();
+  input.setEnabled(true);
+  hideLevelIntro();
+  accumulator = 0;
+  previous = now;
+  if (previewOutro) {
+    beginLevelOutro();
+    return 1;
+  }
+  hud.hidden = false;
+  view.setReticleVisible(targetingReticleInput.checked);
+  return 1;
+}
+
+function hideLevelIntro() {
+  levelIntro.hidden = true;
+  levelIntro.classList.remove("level-intro--active");
+  levelIntroStartedAt = null;
+}
+
+function beginLevelOutro() {
+  if (!lifecycle.beginOutro()) return;
+  input.setEnabled(false);
+  hud.hidden = true;
+  bossHealth.hidden = true;
+  view.setReticleVisible(false);
+  levelOutroStartedAt = performance.now();
+  levelResultsVisible = false;
+  accumulator = 0;
+}
+
+function updateLevelOutro(
+  now: number,
+):
+  | { progress: number; elapsedSeconds: number; durationSeconds: number }
+  | undefined {
+  if (
+    levelOutroStartedAt === null ||
+    (lifecycle.mode !== "outro" && lifecycle.mode !== "transition")
+  )
+    return undefined;
+  const duration = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ? REDUCED_MOTION_OUTRO_DURATION_MS
+    : LEVEL_OUTRO_DURATION_MS;
+  const durationSeconds = duration / 1000;
+  if (lifecycle.mode === "transition")
+    return {
+      progress: 1,
+      elapsedSeconds: durationSeconds,
+      durationSeconds,
+    };
+  const elapsedSeconds = Math.max(0, (now - levelOutroStartedAt) / 1000);
+  const progress = Math.min(1, elapsedSeconds / durationSeconds);
+  if (progress === 1 && !levelResultsVisible) showLevelResults();
+  return { progress, elapsedSeconds, durationSeconds };
+}
+
+function showLevelResults() {
+  const level = LEVELS[styleForLevel(currentLevelNumber)];
+  const summary = summarizeLevelStats(
+    levelStats,
+    activeEnemyPlan,
+    simulation.score,
+  );
+  levelResultsTitle.textContent = `${level.name.toUpperCase()} CLEARED`;
+  levelResultsKillPercent.textContent = `${summary.killPercent}%`;
+  levelResultsEnemies.textContent = `${summary.enemiesKilled} / ${summary.totalEnemies}`;
+  levelResultsAccuracy.textContent = `${summary.accuracyPercent}%`;
+  levelResultsShots.textContent = summary.shotsFired.toString();
+  levelResultsDamage.textContent = formatResultNumber(summary.damageTaken);
+  levelResultsTime.textContent = formatFlightTime(summary.elapsedSeconds);
+  levelResultsScore.textContent = summary.scoreEarned
+    .toString()
+    .padStart(4, "0");
+  levelResults.hidden = false;
+  levelResults.className = "level-results";
+  void levelResults.offsetWidth;
+  levelResults.classList.add("level-results--visible");
+  levelResultsVisible = true;
+  levelResultsContinue.focus();
+}
+
+function continueAfterLevelResults() {
+  if (!levelResultsVisible || !lifecycle.finishOutro()) return;
   const nextLevel = currentLevelNumber + 1;
   const carry = { shield: simulation.player.shield, score: simulation.score };
-  levelTransitionLabel.textContent = `LEVEL ${nextLevel}`;
+  levelResults.classList.add("level-results--leaving");
+  levelTransitionLabel.textContent = "";
   levelTransition.className = "level-transition level-transition--active";
   window.setTimeout(() => {
     void startGame(nextLevel, carry);
   }, 900);
 }
 
+function hideLevelResults() {
+  levelResults.hidden = true;
+  levelResults.className = "level-results";
+  levelResultsVisible = false;
+  levelOutroStartedAt = null;
+}
+
+function formatFlightTime(elapsedSeconds: number) {
+  const totalSeconds = Math.max(0, Math.floor(elapsedSeconds));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function formatResultNumber(value: number) {
+  return Number.isInteger(value) ? value.toString() : value.toFixed(1);
+}
+
 function showLoading(levelNumber: number, isNewRun: boolean) {
+  const level = LEVELS[styleForLevel(levelNumber)];
   retryLoad = null;
+  hideLevelIntro();
+  hideLevelResults();
+  loadingScreen.className = isNewRun
+    ? "loading-screen"
+    : "loading-screen loading-screen--transition";
   loadingScreen.hidden = false;
-  loadingScreen.classList.remove("loading-screen--error");
-  loadingEyebrow.textContent = isNewRun
-    ? "PREPARING SORTIE"
-    : "ENTERING NEW AIRSPACE";
-  loadingTitle.textContent = `LEVEL ${levelNumber}`;
-  loadingStatus.textContent = "Preparing asset manifest…";
+  loadingEyebrow.textContent = `LEVEL ${levelNumber.toString().padStart(2, "0")}`;
+  loadingTitle.textContent = level.name.toUpperCase();
+  loadingStatus.textContent = "LOADING";
   loadingFill.style.width = "0%";
   loadingRetry.hidden = true;
   startButton.disabled = true;
@@ -590,21 +781,26 @@ function showLoading(levelNumber: number, isNewRun: boolean) {
 }
 
 function updateLoadingProgress(progress: AssetLoadProgress) {
-  loadingStatus.textContent = progress.label;
   loadingFill.style.width = `${progress.total ? (progress.loaded / progress.total) * 100 : 0}%`;
 }
 
 function hideLoading() {
+  const revealLevel = loadingScreen.classList.contains(
+    "loading-screen--transition",
+  );
   loadingScreen.hidden = true;
-  levelTransition.className = "level-transition";
+  loadingScreen.className = "loading-screen";
+  levelTransition.className = revealLevel
+    ? "level-transition level-transition--reveal"
+    : "level-transition";
   startButton.disabled = false;
   retryLoad = null;
 }
 
-function showLoadingError(message: string) {
+function showLoadingError() {
   loadingScreen.classList.add("loading-screen--error");
   loadingEyebrow.textContent = "LOAD FAILED";
-  loadingStatus.textContent = message;
+  loadingStatus.textContent = "UNABLE TO LOAD LEVEL";
   loadingRetry.hidden = false;
   startButton.disabled = false;
 }
@@ -640,6 +836,9 @@ function setupDevControls() {
   const devMenuBack = requiredElement<HTMLButtonElement>("#dev-menu-back");
   const openSettingsButton =
     requiredElement<HTMLButtonElement>("#open-dev-settings");
+  const transitionTourButton = requiredElement<HTMLButtonElement>(
+    "#start-transition-tour",
+  );
   const openLevelSwitcherButton = requiredElement<HTMLButtonElement>(
     "#open-level-switcher",
   );
@@ -664,13 +863,9 @@ function setupDevControls() {
     sourceMenu: HTMLDivElement,
     sourceButton: HTMLButtonElement,
   ) {
-    sourceMenu.hidden = true;
-    devMenu.hidden = false;
-    devMenuBack.focus();
+    openMenuChild(sourceMenu, devMenu, devMenuBack);
     closeRootMenu = () => {
-      devMenu.hidden = true;
-      sourceMenu.hidden = false;
-      sourceButton.focus();
+      closeMenuChild(devMenu, sourceMenu, sourceButton);
       closeDevOverlay = null;
       closeRootMenu = undefined;
     };
@@ -682,13 +877,9 @@ function setupDevControls() {
     sourceButton: HTMLButtonElement,
     back: HTMLButtonElement,
   ) {
-    devMenu.hidden = true;
-    submenu.hidden = false;
-    back.focus();
+    openMenuChild(devMenu, submenu, back);
     closeDevOverlay = () => {
-      submenu.hidden = true;
-      devMenu.hidden = false;
-      sourceButton.focus();
+      closeMenuChild(submenu, devMenu, sourceButton);
       closeDevOverlay = closeRootMenu ?? null;
     };
   }
@@ -700,6 +891,9 @@ function setupDevControls() {
     openMenu(mainMenu, startMenuButton),
   );
   devMenuBack.addEventListener("click", () => closeDevOverlay?.());
+  transitionTourButton.addEventListener("click", () =>
+    startRun(1, "transition-tour"),
+  );
   openSettingsButton.addEventListener("click", () =>
     openSubmenu(settingsMenu, openSettingsButton, backButton),
   );
@@ -724,7 +918,7 @@ function setupDevControls() {
     .forEach((button) => {
       button.addEventListener("click", () => {
         const levelId = Number(button.dataset.devLevel) as LevelId;
-        void startGame(levelId);
+        startRun(levelId);
       });
     });
   document
@@ -741,6 +935,7 @@ function setupDevControls() {
     fps: "showFps",
     frame: "showMovementFrame",
     spline: "showSpline",
+    agx: "agxToneMapping",
   };
   const requested =
     new URLSearchParams(location.search).get("dev")?.split(",") ?? [];
@@ -756,7 +951,10 @@ function setupDevControls() {
     start(levelId = 1, overrides = {}) {
       Object.assign(devSettings, overrides);
       applyDevSettings();
-      void startGame(levelId);
+      startRun(levelId);
+    },
+    transitionTour() {
+      startRun(1, "transition-tour");
     },
   };
   applyDevSettings();
@@ -774,6 +972,7 @@ declare global {
       settings: DevSettings;
       set: (name: DevSettingName, enabled?: boolean) => void;
       start: (levelId?: LevelId, overrides?: Partial<DevSettings>) => void;
+      transitionTour: () => void;
     };
   }
 }

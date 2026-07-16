@@ -10,8 +10,6 @@ import {
   railFrameAtDistance,
   railOffsetPosition,
   RAIL_SPEED,
-  SECTION_LENGTH,
-  SECTION_SPAN,
 } from "./railSystem";
 import { controlEnemy } from "./enemyControllers";
 import { createWorld, type WorldRuntime } from "../world/worldSystem";
@@ -19,6 +17,13 @@ import { distanceSquared, sweptSpheresIntersect } from "./collision";
 import { removeWhere } from "../core/collections";
 import type { FlightEventSink } from "../game/flightEvents";
 import { ENEMY_MIN_PLAYER_DISTANCE } from "../game/flightDistances";
+import {
+  ENEMIES,
+  type EnemyGroupDefinition,
+  type EnemyWaveDefinition,
+  type LevelEnemyPlan,
+} from "../enemies";
+import { createStandardEnemyPlan } from "../game/enemyEncounters";
 
 const PLAYER_SPEED = 12;
 export const BARREL_ROLL_DURATION = 0.5;
@@ -28,18 +33,9 @@ const FIRE_INTERVAL = 0.18;
 const SLOW_RAIL_SPEED = 6;
 const FAST_RAIL_SPEED = 25;
 const PACE_RAMP_RATE = 14;
-const STREAM_AHEAD = 220;
 const ENEMY_CLEANUP_MARGIN = 180;
-const ENEMY_SCATTER_LEAD = 42;
-const ENEMY_FORWARD_SPEED = 7;
-const ENEMY_SHOT_SPEED = 38;
-const BOSS_SHOT_SPEED = 48;
-const WAVE_OFFSET = 130;
-const BOSS_DISTANCE = SECTION_SPAN * 2 + 130;
-const BOSS_HEALTH = 24;
 export const ENEMY_DESTRUCTION_DURATION = 1.25;
 export const BOSS_DESTRUCTION_DURATION = 1.8;
-const ENEMY_RETREAT_SPEED = 32;
 export const FLIGHT_WINDOW = {
   maxX: 14,
   minY: 0.8,
@@ -62,15 +58,19 @@ export class FlightSimulation {
   private elapsed = 0;
   private readonly difficultyMultiplier: number;
   private spawnedWaves = 0;
-  private bossSpawned = false;
+  private completed = false;
   private rollTimeRemaining = 0;
   private readonly events?: FlightEventSink;
+  private readonly enemyPlan: LevelEnemyPlan;
+  private readonly oneShotEnemies: boolean;
 
   constructor(
     options: {
       shield?: number;
       score?: number;
       level?: number;
+      enemyPlan?: LevelEnemyPlan;
+      oneShotEnemies?: boolean;
       world?: WorldRuntime;
       events?: FlightEventSink;
     } = {},
@@ -86,6 +86,8 @@ export class FlightSimulation {
     };
     this.score = options.score ?? 0;
     this.difficultyMultiplier = 1.2 ** Math.max(0, (options.level ?? 1) - 1);
+    this.enemyPlan = options.enemyPlan ?? createStandardEnemyPlan("riftspike");
+    this.oneShotEnemies = options.oneShotEnemies ?? false;
     this.world = options.world ?? createWorld([]);
     this.events = options.events;
     this.streamCombat();
@@ -104,6 +106,7 @@ export class FlightSimulation {
       scoreDelta: 0,
       playerHits: 0,
       bossDefeated: false,
+      levelComplete: false,
     };
     const targetRailSpeed =
       command.pace > 0
@@ -235,14 +238,12 @@ export class FlightSimulation {
           killedEnemies.add(enemy.id);
           this.enemyDestructions.push({
             id: enemy.id,
+            enemyId: enemy.enemyId,
             position: { ...enemy.position },
             radius: enemy.radius,
             kind: enemy.kind ?? "standard",
             age: 0,
-            duration:
-              enemy.kind === "boss"
-                ? BOSS_DESTRUCTION_DURATION
-                : ENEMY_DESTRUCTION_DURATION,
+            duration: ENEMIES[enemy.enemyId].destructionDuration,
           });
           if (enemy.kind === "boss") result.bossDefeated = true;
         }
@@ -260,6 +261,9 @@ export class FlightSimulation {
           position: { ...enemy.position },
           listenerPosition: { ...playerWorld },
         });
+    result.scoreDelta = this.enemies
+      .filter((enemy) => killedEnemies.has(enemy.id))
+      .reduce((total, enemy) => total + ENEMIES[enemy.enemyId].score, 0);
     let damageTaken = 0;
     for (const shot of this.projectiles)
       if (
@@ -272,8 +276,6 @@ export class FlightSimulation {
         result.playerHits++;
         damageTaken += shot.damage ?? 1;
       }
-    if (!this.invulnerable)
-      this.player.shield = Math.max(0, this.player.shield - damageTaken);
     removeWhere(
       this.projectiles,
       (shot) =>
@@ -289,82 +291,82 @@ export class FlightSimulation {
     );
     result.enemyHits = damagedEnemies.size;
     result.kills = killedEnemies.size;
-    result.scoreDelta =
-      (killedEnemies.size - (result.bossDefeated ? 1 : 0)) * 100 +
-      (result.bossDefeated ? 2500 : 0);
     this.score += result.scoreDelta;
+    if (
+      !this.completed &&
+      this.spawnedWaves === this.enemyPlan.waves.length &&
+      this.enemyPlan.waves.every((_, index) => this.isWaveResolved(index))
+    ) {
+      this.completed = true;
+      result.levelComplete = true;
+    }
+    if (result.levelComplete) {
+      result.playerHits = 0;
+      removeWhere(this.projectiles, (shot) => shot.owner === "enemy");
+    } else if (!this.invulnerable) {
+      this.player.shield = Math.max(0, this.player.shield - damageTaken);
+    }
     return result;
   }
 
   private streamCombat() {
-    while (
-      this.spawnedWaves < 2 &&
-      this.waveDistance(this.spawnedWaves) <= this.railDistance + STREAM_AHEAD
-    ) {
-      this.spawnEnemyGroup(
-        this.spawnedWaves,
-        this.waveDistance(this.spawnedWaves),
-      );
+    while (this.spawnedWaves < this.enemyPlan.waves.length) {
+      const wave = this.enemyPlan.waves[this.spawnedWaves];
+      if (this.railDistance < wave.spawnAtRailDistance) break;
+      if (
+        wave.requiresPreviousWaveResolved &&
+        !this.isWaveResolved(this.spawnedWaves - 1)
+      )
+        break;
+      this.spawnEnemyWave(this.spawnedWaves, wave);
       this.spawnedWaves++;
     }
-    const secondWaveResolved =
-      this.spawnedWaves === 2 &&
-      this.enemies
-        .filter((enemy) => enemy.kind !== "boss" && enemy.sectionIndex === 1)
-        .every((enemy) => enemy.scatterVelocity !== undefined);
-    const completedSecondTurn = this.railDistance >= SECTION_SPAN * 2;
-    if (!this.bossSpawned && secondWaveResolved && completedSecondTurn) {
-      this.spawnBoss();
-      this.bossSpawned = true;
-    }
   }
 
-  private waveDistance(waveIndex: number) {
-    return waveIndex * SECTION_SPAN + WAVE_OFFSET;
+  private isWaveResolved(waveIndex: number) {
+    if (waveIndex < 0 || waveIndex >= this.spawnedWaves) return false;
+    return this.enemies
+      .filter((enemy) => enemy.waveIndex === waveIndex)
+      .every(
+        (enemy) =>
+          enemy.kind === "standard" && enemy.scatterVelocity !== undefined,
+      );
   }
 
-  private spawnEnemyGroup(sectionIndex: number, groupDistance: number) {
-    const formation = [
-      [-5, 5],
-      [0, 7],
-      [5, 5],
-      [-2.5, 3],
-      [2.5, 3],
-    ];
-    formation.forEach(([x, y], index) => {
+  private spawnEnemyWave(waveIndex: number, wave: EnemyWaveDefinition) {
+    for (const group of wave.groups)
+      this.spawnEnemyGroup(waveIndex, wave, group);
+  }
+
+  private spawnEnemyGroup(
+    waveIndex: number,
+    wave: EnemyWaveDefinition,
+    group: EnemyGroupDefinition,
+  ) {
+    const definition = ENEMIES[group.enemy];
+    group.formation.forEach(([x, y], index) => {
+      const railDistance =
+        wave.enemyRailDistance - index * (group.railSpacing ?? 2);
       this.enemies.push({
         id: this.nextId++,
-        position: railOffsetPosition(groupDistance, x, y),
-        radius: 1.25,
-        railDistance: groupDistance - index * 2,
+        enemyId: definition.id,
+        position: railOffsetPosition(railDistance, x, y),
+        radius: definition.radius,
+        railDistance,
         offsetX: x,
         offsetY: y,
-        phase: sectionIndex * 1.7 + index,
-        sectionIndex,
-        controller: "standard",
-        kind: "standard",
-        health: this.difficultyMultiplier,
-        maxHealth: this.difficultyMultiplier,
-        exitRailDistance:
-          sectionIndex * SECTION_SPAN + SECTION_LENGTH - ENEMY_SCATTER_LEAD,
+        phase: waveIndex * 1.7 + (group.phaseOffset ?? 0) + index,
+        waveIndex,
+        controller: definition.controller,
+        kind: definition.kind,
+        health: this.oneShotEnemies
+          ? 1
+          : definition.baseHealth * this.difficultyMultiplier,
+        maxHealth: this.oneShotEnemies
+          ? 1
+          : definition.baseHealth * this.difficultyMultiplier,
+        exitRailDistance: wave.exitAtRailDistance,
       });
-    });
-  }
-
-  private spawnBoss() {
-    this.enemies.push({
-      id: this.nextId++,
-      position: railOffsetPosition(BOSS_DISTANCE, 0, 7),
-      radius: 3.5,
-      railDistance: BOSS_DISTANCE,
-      offsetX: 0,
-      offsetY: 7,
-      phase: 0,
-      sectionIndex: 2,
-      controller: "boss",
-      kind: "boss",
-      health: BOSS_HEALTH * this.difficultyMultiplier,
-      maxHealth: BOSS_HEALTH * this.difficultyMultiplier,
     });
   }
 
@@ -392,13 +394,11 @@ export class FlightSimulation {
       enemies: this.enemies,
     };
     for (const enemy of this.enemies) {
-      const scatterAt =
-        enemy.exitRailDistance ??
-        enemy.sectionIndex * SECTION_SPAN + SECTION_LENGTH - ENEMY_SCATTER_LEAD;
       if (
         enemy.kind !== "boss" &&
         !enemy.scatterVelocity &&
-        this.railDistance >= scatterAt
+        enemy.exitRailDistance !== undefined &&
+        this.railDistance >= enemy.exitRailDistance
       ) {
         const rail = railFrameAtDistance(enemy.railDistance);
         const side = enemy.offsetX < 0 ? -1 : 1;
@@ -415,6 +415,7 @@ export class FlightSimulation {
         continue;
       }
       const control = controlEnemy(enemy, context, dt);
+      const definition = ENEMIES[enemy.enemyId];
       const tooClose =
         enemy.railDistance - this.railDistance <= ENEMY_MIN_PLAYER_DISTANCE;
       enemy.offsetX = clamp(
@@ -429,9 +430,9 @@ export class FlightSimulation {
       );
       enemy.railDistance +=
         (tooClose
-          ? ENEMY_RETREAT_SPEED +
+          ? definition.retreatSpeed +
             (enemy.kind === "boss" ? Math.max(0, control.depthSpeed) : 0)
-          : ENEMY_FORWARD_SPEED + control.depthSpeed) * dt;
+          : definition.forwardSpeed + control.depthSpeed) * dt;
       enemy.position = railOffsetPosition(
         enemy.railDistance,
         enemy.offsetX,
@@ -448,8 +449,8 @@ export class FlightSimulation {
     playerVelocity: { x: number; y: number; z: number },
   ) {
     const distance = Math.sqrt(distanceSquared(enemy.position, playerPosition));
-    const shotSpeed =
-      enemy.kind === "boss" ? BOSS_SHOT_SPEED : ENEMY_SHOT_SPEED;
+    const definition = ENEMIES[enemy.enemyId];
+    const shotSpeed = definition.shot.speed;
     const leadTime = Math.min(1.2, distance / shotSpeed);
     const error = Math.sin(enemy.id * 12.9898 + this.elapsed * 2.1) * 2.2;
     const target = {
@@ -462,8 +463,7 @@ export class FlightSimulation {
       dy = target.y - enemy.position.y,
       dz = target.z - enemy.position.z;
     const length = Math.hypot(dx, dy, dz) || 1;
-    const spreads = enemy.kind === "boss" ? [-0.12, 0, 0.12] : [0];
-    for (const spread of spreads)
+    for (const spread of definition.shot.spreads)
       this.projectiles.push({
         id: this.nextId++,
         position: { ...enemy.position },
@@ -472,9 +472,9 @@ export class FlightSimulation {
           y: (dy / length) * shotSpeed,
           z: (dz / length) * shotSpeed - spread * shotSpeed * 0.3,
         },
-        radius: enemy.kind === "boss" ? 0.34 : 0.26,
+        radius: definition.shot.radius,
         owner: "enemy",
-        damage: this.difficultyMultiplier,
+        damage: definition.shot.damage * this.difficultyMultiplier,
       });
   }
 }

@@ -4,11 +4,82 @@ import { railOffsetPosition, SECTION_LENGTH, SECTION_SPAN } from "./railSystem";
 import type { EnemyState } from "./types";
 import { islandField, IslandSystem } from "../world/islandSystem";
 import { createWorld } from "../world/worldSystem";
+import type { LevelEnemyPlan } from "../enemies";
 
 const islandWorld = () =>
   createWorld([islandField({ style: "weathered", color: 0x8b714d })]);
 
 describe("FlightSimulation", () => {
+  it("spawns mixed enemy groups and completes a boss-free encounter plan", () => {
+    const enemyPlan = {
+      waves: [
+        {
+          spawnAtRailDistance: 0,
+          enemyRailDistance: 80,
+          exitAtRailDistance: 0,
+          groups: [
+            {
+              enemy: "riftspike",
+              formation: [
+                [-3, 4],
+                [3, 4],
+              ],
+            },
+            { enemy: "thornwing", formation: [[0, 7]] },
+          ],
+        },
+      ],
+    } satisfies LevelEnemyPlan;
+    const sim = new FlightSimulation({ enemyPlan });
+
+    expect(sim.enemies.map((enemy) => enemy.enemyId)).toEqual([
+      "riftspike",
+      "riftspike",
+      "thornwing",
+    ]);
+    expect(sim.enemies.map((enemy) => [enemy.offsetX, enemy.offsetY])).toEqual([
+      [-3, 4],
+      [3, 4],
+      [0, 7],
+    ]);
+
+    const result = sim.step(
+      { steerX: 0, steerY: 0, fire: false, pace: 0 },
+      1 / 60,
+    );
+    expect(result.levelComplete).toBe(true);
+    expect(result.bossDefeated).toBe(false);
+  });
+
+  it("can gate a later wave until the previous wave resolves", () => {
+    const enemyPlan = {
+      waves: [
+        {
+          spawnAtRailDistance: 0,
+          enemyRailDistance: 80,
+          exitAtRailDistance: 0,
+          groups: [{ enemy: "riftspike", formation: [[0, 4]] }],
+        },
+        {
+          spawnAtRailDistance: 0,
+          enemyRailDistance: 120,
+          requiresPreviousWaveResolved: true,
+          groups: [{ enemy: "riftmaw", formation: [[0, 7]] }],
+        },
+      ],
+    } satisfies LevelEnemyPlan;
+    const sim = new FlightSimulation({ enemyPlan });
+
+    expect(sim.enemies.map((enemy) => enemy.enemyId)).toEqual(["riftspike"]);
+    sim.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 1 / 60);
+    expect(sim.enemies.map((enemy) => enemy.enemyId)).toEqual(["riftspike"]);
+    sim.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 1 / 60);
+    expect(sim.enemies.map((enemy) => enemy.enemyId)).toEqual([
+      "riftspike",
+      "riftmaw",
+    ]);
+  });
+
   it("fires player projectiles at the configured speed", () => {
     const sim = new FlightSimulation();
     sim.projectiles.length = 0;
@@ -20,6 +91,45 @@ describe("FlightSimulation", () => {
     );
     expect(shot).toBeDefined();
     expect(Math.hypot(shot!.velocity.x, shot!.velocity.z)).toBeCloseTo(102);
+  });
+
+  it("ignores enemy shots when the final enemy dies in the same step", () => {
+    const enemyPlan = {
+      waves: [
+        {
+          spawnAtRailDistance: 0,
+          enemyRailDistance: 0,
+          groups: [{ enemy: "riftspike", formation: [[0, 4]] }],
+        },
+      ],
+    } satisfies LevelEnemyPlan;
+    const sim = new FlightSimulation({ enemyPlan });
+    const enemy = sim.enemies[0]!;
+    sim.projectiles.length = 0;
+    sim.projectiles.push(
+      {
+        id: 10_001,
+        position: { ...enemy.position },
+        velocity: { x: 0, y: 0, z: 0 },
+        radius: 0.3,
+        owner: "player",
+      },
+      {
+        id: 10_002,
+        position: railOffsetPosition(0, 0, 4),
+        velocity: { x: 0, y: 0, z: 0 },
+        radius: 2,
+        owner: "enemy",
+        damage: 5,
+      },
+    );
+
+    const result = sim.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 0);
+
+    expect(result.levelComplete).toBe(true);
+    expect(result.playerHits).toBe(0);
+    expect(sim.player.shield).toBe(5);
+    expect(sim.projectiles.some((shot) => shot.owner === "enemy")).toBe(false);
   });
 
   it("moves deterministically and keeps the player inside the flight window", () => {
@@ -122,13 +232,14 @@ describe("FlightSimulation", () => {
     sim.enemies.length = 0;
     sim.enemies.push({
       id: 999,
+      enemyId: "riftspike",
       position: railOffsetPosition(40, 0, 4),
       radius: 1.25,
       railDistance: 40,
       offsetX: 0,
       offsetY: 4,
       phase: 0,
-      sectionIndex: 0,
+      waveIndex: 0,
       controller: "formation",
     });
     for (let i = 0; i < 90; i++)
@@ -144,13 +255,14 @@ describe("FlightSimulation", () => {
     sim.projectiles.length = 0;
     sim.enemies.push({
       id: 999,
+      enemyId: "riftspike",
       position: { x: 0, y: 4, z: 0 },
       radius: 1.25,
       railDistance: 0,
       offsetX: 0,
       offsetY: 4,
       phase: 0,
-      sectionIndex: 0,
+      waveIndex: 0,
       controller: "formation",
       scatterVelocity: { x: 0, y: 0, z: 0 },
     });
@@ -186,13 +298,14 @@ describe("FlightSimulation", () => {
       sim.projectiles.length = 0;
       sim.enemies.push({
         id: 999,
+        enemyId: "riftspike",
         position: { x: 0, y: 4, z: 0 },
         radius: 1.25,
         railDistance: 0,
         offsetX: 0,
         offsetY: 4,
         phase: 0,
-        sectionIndex: 0,
+        waveIndex: 0,
         controller: "formation",
         scatterVelocity: { x: 0, y: 0, z: 0 },
       });
@@ -287,13 +400,14 @@ describe("FlightSimulation", () => {
     sim.projectiles.length = 0;
     const enemy: EnemyState = {
       id: 997,
+      enemyId: "riftspike",
       position: railOffsetPosition(13, 0, 4),
       radius: 1.25,
       railDistance: 13,
       offsetX: 0,
       offsetY: 4,
       phase: 0,
-      sectionIndex: 0,
+      waveIndex: 0,
       controller: "standard",
       controllerState: {
         decisionCooldown: 1,
@@ -319,13 +433,14 @@ describe("FlightSimulation", () => {
     sim.projectiles.length = 0;
     const boss: EnemyState = {
       id: 998,
+      enemyId: "riftmaw",
       position: railOffsetPosition(28, 0, 4),
       radius: 3.5,
       railDistance: 28,
       offsetX: 0,
       offsetY: 4,
       phase: 0,
-      sectionIndex: 0,
+      waveIndex: 0,
       controller: "boss",
       kind: "boss",
       controllerState: {
@@ -353,13 +468,14 @@ describe("FlightSimulation", () => {
     sim.enemies.length = 0;
     const boss: EnemyState = {
       id: 998,
+      enemyId: "riftmaw",
       position: railOffsetPosition(40, 0, 4),
       radius: 3.5,
       railDistance: 40,
       offsetX: 0,
       offsetY: 4,
       phase: 0,
-      sectionIndex: 2,
+      waveIndex: 2,
       controller: "formation",
       kind: "boss",
       health: 2,
@@ -391,12 +507,12 @@ describe("FlightSimulation", () => {
       new Set(
         sim.enemies
           .filter((enemy) => enemy.kind !== "boss")
-          .map((enemy) => enemy.sectionIndex),
+          .map((enemy) => enemy.waveIndex),
       ),
     ).toEqual(new Set([1]));
     expect(
       sim.enemies
-        .filter((enemy) => enemy.sectionIndex === 1)
+        .filter((enemy) => enemy.waveIndex === 1)
         .every((enemy) => enemy.scatterVelocity),
     ).toBe(true);
 
@@ -426,5 +542,13 @@ describe("FlightSimulation", () => {
     });
     second.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 1 / 60);
     expect(second.player.shield).toBeCloseTo(3.8);
+  });
+
+  it("can force every enemy to one-shot health for transition testing", () => {
+    const sim = new FlightSimulation({ level: 6, oneShotEnemies: true });
+
+    expect(sim.enemies.length).toBeGreaterThan(0);
+    expect(sim.enemies.every((enemy) => enemy.health === 1)).toBe(true);
+    expect(sim.enemies.every((enemy) => enemy.maxHealth === 1)).toBe(true);
   });
 });

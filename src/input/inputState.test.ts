@@ -29,6 +29,35 @@ describe("InputState", () => {
     expect(input.command().roll).toBe(0);
   });
 
+  it("queues a quick fire tap until the next simulation command", () => {
+    const target = new FakeWindow();
+    const input = new InputState(
+      target as Pick<Window, "addEventListener" | "removeEventListener">,
+    );
+    target.dispatch("keydown", "Space");
+    target.dispatch("keyup", "Space");
+
+    expect(input.command().fire).toBe(true);
+    expect(input.command().fire).toBe(false);
+  });
+
+  it("clears and ignores gameplay keys while disabled", () => {
+    const target = new FakeWindow();
+    const input = new InputState(
+      target as Pick<Window, "addEventListener" | "removeEventListener">,
+    );
+    target.dispatch("keydown", "Space");
+    input.setEnabled(false);
+    target.dispatch("keydown", "Space");
+
+    expect(input.command().fire).toBe(false);
+
+    input.setEnabled(true);
+    expect(input.command().fire).toBe(false);
+    target.dispatch("keydown", "Space");
+    expect(input.command().fire).toBe(true);
+  });
+
   it("removes listeners and clears state on disposal", () => {
     const target = new FakeWindow();
     const input = new InputState(

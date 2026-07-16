@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import type { LevelId } from '../levels';
+import { ENEMIES, enemyIdsForPlan, type EnemyId } from '../enemies';
+import { LEVELS, type LevelId } from '../levels';
 
 export type GameAssets = {
   createPlayer: (modelId?: PlayerModelId) => THREE.Group;
-  createEnemy: () => THREE.Mesh;
-  createGuardian: () => THREE.Mesh;
+  createEnemy: (enemyId: EnemyId) => THREE.Mesh;
 };
 
 export const PLAYER_MODEL_IDS = ['plane-1', 'plane-3'] as const;
@@ -22,7 +22,6 @@ export const PLAYER_EFFECT_SOCKETS = [
 export type AssetLoadProgress = {
   loaded: number;
   total: number;
-  label: string;
 };
 
 type ModelAsset = {
@@ -65,15 +64,6 @@ const playerPlanes: Record<PlayerModelId, ModelAsset> = {
   },
 };
 
-const riftspikeUrl = new URL(
-  '../../assets/enemies/riftspike/riftspike.glb',
-  import.meta.url,
-).href;
-const riftmawUrl = new URL(
-  '../../assets/enemies/riftmaw/riftmaw.glb',
-  import.meta.url,
-).href;
-
 // Keep level-only models here. The loader already treats each level as its own
 // bundle, so later levels can load and release different content independently.
 const levelModels: Record<LevelId, readonly ModelAsset[]> = {
@@ -86,34 +76,41 @@ const levelModels: Record<LevelId, readonly ModelAsset[]> = {
 };
 
 const modelCache = new Map<string, Promise<LoadedModel>>();
-let riftspikeCache: Promise<THREE.Mesh> | undefined;
-let riftmawCache: Promise<THREE.Mesh> | undefined;
+const enemyCache = new Map<EnemyId, Promise<THREE.Mesh>>();
 
 export async function loadGameAssets(
   levelId: LevelId,
   onProgress?: (progress: AssetLoadProgress) => void,
 ): Promise<GameAssets> {
   const models = [...Object.values(playerPlanes), ...levelModels[levelId]];
-  const totalAssets = models.length + 2;
+  const enemyIds = enemyIdsForPlan(LEVELS[levelId].enemies);
+  const totalAssets = models.length + enemyIds.length;
   const loaded = new Map<string, LoadedModel>();
+  const loadedEnemies = new Map<EnemyId, THREE.Mesh>();
 
   for (let index = 0; index < models.length; index++) {
     const model = models[index];
-    onProgress?.({ loaded: index, total: totalAssets, label: `Loading ${model.label}…` });
+    onProgress?.({ loaded: index, total: totalAssets });
     loaded.set(model.key, await loadModel(model));
-    onProgress?.({ loaded: index + 1, total: totalAssets, label: `${model.label} ready` });
+    onProgress?.({ loaded: index + 1, total: totalAssets });
   }
 
   for (const modelId of PLAYER_MODEL_IDS)
     if (!loaded.has(playerPlanes[modelId].key))
       throw new Error(`Player aircraft ${modelId} did not load.`);
 
-  onProgress?.({ loaded: models.length, total: totalAssets, label: 'Loading Riftspike…' });
-  const riftspike = await loadRiftspike();
-  onProgress?.({ loaded: models.length + 1, total: totalAssets, label: 'Riftspike ready' });
-  onProgress?.({ loaded: models.length + 1, total: totalAssets, label: 'Loading Riftmaw…' });
-  const riftmaw = await loadRiftmaw();
-  onProgress?.({ loaded: totalAssets, total: totalAssets, label: 'Riftmaw ready' });
+  for (let index = 0; index < enemyIds.length; index++) {
+    const enemyId = enemyIds[index];
+    onProgress?.({
+      loaded: models.length + index,
+      total: totalAssets,
+    });
+    loadedEnemies.set(enemyId, await loadEnemy(enemyId));
+    onProgress?.({
+      loaded: models.length + index + 1,
+      total: totalAssets,
+    });
+  }
 
   return {
     createPlayer: (modelId = 'plane-1') => {
@@ -121,43 +118,32 @@ export async function loadGameAssets(
       if (!player) throw new Error(`Player aircraft ${modelId} is unavailable.`);
       return createPlayerInstance(player);
     },
-    createEnemy: () => createMeshInstance(riftspike),
-    createGuardian: () => createMeshInstance(riftmaw),
+    createEnemy: (enemyId) => {
+      const enemy = loadedEnemies.get(enemyId);
+      if (!enemy) throw new Error(`${ENEMIES[enemyId].label} is unavailable.`);
+      return createMeshInstance(enemy);
+    },
   };
 }
 
-function loadRiftspike(): Promise<THREE.Mesh> {
-  if (riftspikeCache) return riftspikeCache;
-  riftspikeCache = new GLTFLoader().loadAsync(riftspikeUrl).then((gltf) => {
+function loadEnemy(enemyId: EnemyId): Promise<THREE.Mesh> {
+  const cached = enemyCache.get(enemyId);
+  if (cached) return cached;
+  const enemy = ENEMIES[enemyId];
+  const promise = new GLTFLoader().loadAsync(enemy.modelUrl).then((gltf) => {
     let mesh: THREE.Mesh | undefined;
     gltf.scene.traverse((object) => {
       if (!mesh && object instanceof THREE.Mesh) mesh = object;
     });
-    if (!mesh) throw new Error('The Riftspike GLB contains no mesh.');
+    if (!mesh) throw new Error(`The ${enemy.label} GLB contains no mesh.`);
     return mesh;
   }).catch((error: unknown) => {
-    riftspikeCache = undefined;
+    enemyCache.delete(enemyId);
     const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(`Could not load Riftspike: ${detail}`);
+    throw new Error(`Could not load ${enemy.label}: ${detail}`);
   });
-  return riftspikeCache;
-}
-
-function loadRiftmaw(): Promise<THREE.Mesh> {
-  if (riftmawCache) return riftmawCache;
-  riftmawCache = new GLTFLoader().loadAsync(riftmawUrl).then((gltf) => {
-    let mesh: THREE.Mesh | undefined;
-    gltf.scene.traverse((object) => {
-      if (!mesh && object instanceof THREE.Mesh) mesh = object;
-    });
-    if (!mesh) throw new Error('The Riftmaw GLB contains no mesh.');
-    return mesh;
-  }).catch((error: unknown) => {
-    riftmawCache = undefined;
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(`Could not load Riftmaw: ${detail}`);
-  });
-  return riftmawCache;
+  enemyCache.set(enemyId, promise);
+  return promise;
 }
 
 function createMeshInstance(source: THREE.Mesh): THREE.Mesh {

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import type { EnemyId } from "../enemies";
 import type { EnemyDestructionState, Vec3 } from "../sim/types";
 
 type DestructionSource = {
@@ -47,19 +48,17 @@ const lookAtMatrix = new THREE.Matrix4();
 const lookAtTarget = new THREE.Vector3();
 
 export class EnemyDestructionView {
-  private readonly templates: Record<"standard" | "boss", DestructionTemplate>;
+  private readonly templates = new Map<EnemyId, DestructionTemplate>();
   private readonly effects = new Map<number, DestructionEffect>();
   private readonly seen = new Set<number>();
   private readonly particleTexture = createParticleTexture();
 
   constructor(
     private readonly scene: THREE.Scene,
-    sources: Record<"standard" | "boss", DestructionSource>,
+    sources: ReadonlyMap<EnemyId, DestructionSource>,
   ) {
-    this.templates = {
-      standard: createTemplate(sources.standard),
-      boss: createTemplate(sources.boss),
-    };
+    for (const [enemyId, source] of sources)
+      this.templates.set(enemyId, createTemplate(source));
   }
 
   sync(
@@ -86,7 +85,7 @@ export class EnemyDestructionView {
 
   dispose() {
     for (const effect of this.effects.values()) this.disposeEffect(effect);
-    for (const template of Object.values(this.templates)) {
+    for (const template of this.templates.values()) {
       for (const fragment of template.fragments) fragment.geometry.dispose();
       template.material.dispose();
     }
@@ -96,7 +95,9 @@ export class EnemyDestructionView {
   }
 
   private createEffect(state: EnemyDestructionState, playerPosition: Vec3) {
-    const template = this.templates[state.kind];
+    const template = this.templates.get(state.enemyId);
+    if (!template)
+      throw new Error(`No destruction template for ${state.enemyId}.`);
     const scale = state.radius / template.baseRadius;
     const random = seededRandom(state.id * 0x9e3779b1);
     const root = new THREE.Group();

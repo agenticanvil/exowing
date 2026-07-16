@@ -6,6 +6,7 @@ describe("level definitions", () => {
     const openSpace = {
       id: 1,
       name: "Open Space",
+      enemies: { waves: [] },
       environment: {
         atmosphere: false,
         wispyClouds: false,
@@ -70,5 +71,14 @@ describe("level definitions", () => {
 
     expect(systems.map((system) => system.id)).toEqual(["boreal-forest"]);
     expect(LEVELS[6].environment.atmosphere).toBe(true);
+  });
+
+  it("uses Thornwing as Ironpine Basin's standard enemy", () => {
+    expect(
+      LEVELS[6].enemies.waves
+        .flatMap((wave) => wave.groups)
+        .filter((group) => group.enemy !== "riftmaw")
+        .map((group) => group.enemy),
+    ).toEqual(["thornwing", "thornwing"]);
   });
 });

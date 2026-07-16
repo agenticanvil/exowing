@@ -1,3 +1,7 @@
+import type { EnemyControllerId, EnemyId, EnemyKind } from "../enemies";
+
+export type { EnemyControllerId } from "../enemies";
+
 export type Vec3 = { x: number; y: number; z: number };
 
 export type PlayerCommand = {
@@ -18,7 +22,6 @@ export type PlayerState = {
   rollProgress: number;
 };
 
-export type EnemyControllerId = "standard" | "formation" | "boss";
 export type EnemyControllerState = {
   decisionCooldown: number;
   fireCooldown: number;
@@ -29,14 +32,15 @@ export type EnemyControllerState = {
 
 export type EnemyState = {
   id: number;
+  enemyId: EnemyId;
   position: Vec3;
   radius: number;
   railDistance: number;
   offsetX: number;
   offsetY: number;
   phase: number;
-  sectionIndex: number;
-  kind?: "standard" | "boss";
+  waveIndex: number;
+  kind?: EnemyKind;
   health?: number;
   maxHealth?: number;
   hitFlash?: number;
@@ -47,9 +51,10 @@ export type EnemyState = {
 };
 export type EnemyDestructionState = {
   id: number;
+  enemyId: EnemyId;
   position: Vec3;
   radius: number;
-  kind: "standard" | "boss";
+  kind: EnemyKind;
   age: number;
   duration: number;
 };
@@ -76,4 +81,5 @@ export type FlightStepResult = {
   scoreDelta: number;
   playerHits: number;
   bossDefeated: boolean;
+  levelComplete: boolean;
 };

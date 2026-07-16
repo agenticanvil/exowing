@@ -169,8 +169,8 @@ export function mountAssetScaleTool(): { refresh: () => void } {
       updatePreview();
     })
     .catch((error: unknown) => {
-      status.textContent =
-        error instanceof Error ? error.message.toUpperCase() : "LOAD FAILED";
+      console.error("Unable to load asset scaling preview", error);
+      status.textContent = "UNABLE TO LOAD ASSETS";
     });
 
   function updatePreview() {
