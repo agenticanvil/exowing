@@ -5,6 +5,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "generate:music": "bun run generate:music:barrage && bun run generate:music:void-assault",
+    "generate:music:barrage": "node scripts/generate-music.mjs --variant=barrage",
+    "generate:music:void-assault": "node scripts/generate-music.mjs --variant=void-assault",
     "test": "vitest run",
     "sim": "tsx src/dev/simRunner.ts",
     "perf": "node scripts/performance-run.mjs",
@@ -24,6 +27,7 @@
     "tsx": "^4.23.1",
     "typescript": "^7.0.2",
     "vite": "^8.1.4",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "wasm-media-encoders": "^0.7.0"
   }
 }
