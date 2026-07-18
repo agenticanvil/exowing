@@ -25,6 +25,7 @@ import {
 } from "./game/levelStats";
 import type { GameViewSequence } from "./view/gameView";
 import { createTransitionTourPlan } from "./game/enemyEncounters";
+import type { PickupId } from "./pickups";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("Missing app root");
@@ -437,7 +438,7 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   const devMenuOpen = document.querySelector<HTMLElement>(
-    "#dev-menu:not([hidden]), #dev-settings-menu:not([hidden]), #dev-level-menu:not([hidden]), #asset-scaling-menu:not([hidden])",
+    "#dev-menu:not([hidden]), #dev-settings-menu:not([hidden]), #dev-level-menu:not([hidden]), #dev-pickup-menu:not([hidden]), #asset-scaling-menu:not([hidden])",
   );
   if (devMenuOpen && closeDevOverlay) {
     closeDevOverlay();
@@ -554,13 +555,19 @@ function updateFrame(now: number) {
     while (lifecycle.mode === "playing" && accumulator >= fixedDt) {
       simulation.invulnerable =
         runMode === "transition-tour" || devSettings.invulnerable;
-      const shieldBeforeStep = simulation.player.shield;
+      const protectionBeforeStep =
+        simulation.player.shield + simulation.player.overshield;
       const result = simulation.step(input.command(), fixedDt);
       recordLevelStep(
         levelStats,
         result,
         fixedDt,
-        Math.max(0, shieldBeforeStep - simulation.player.shield),
+        Math.max(
+          0,
+          protectionBeforeStep -
+            simulation.player.shield -
+            simulation.player.overshield,
+        ),
       );
       if (result.playerHits > 0) flashDamageVignette();
       if (result.levelComplete) beginLevelOutro();
@@ -845,10 +852,16 @@ function setupDevControls() {
   const openAssetScalingButton = requiredElement<HTMLButtonElement>(
     "#open-asset-scaling",
   );
+  const openPickupSpawnerButton = requiredElement<HTMLButtonElement>(
+    "#open-pickup-spawner",
+  );
   const settingsMenu = requiredElement<HTMLDivElement>("#dev-settings-menu");
   const backButton = requiredElement<HTMLButtonElement>("#dev-settings-back");
   const levelMenu = requiredElement<HTMLDivElement>("#dev-level-menu");
   const levelBack = requiredElement<HTMLButtonElement>("#dev-level-back");
+  const pickupMenu = requiredElement<HTMLDivElement>("#dev-pickup-menu");
+  const pickupBack = requiredElement<HTMLButtonElement>("#dev-pickup-back");
+  const pickupList = requiredElement<HTMLDivElement>("#dev-pickup-list");
   const assetScalingMenu = requiredElement<HTMLDivElement>(
     "#asset-scaling-menu",
   );
@@ -900,6 +913,9 @@ function setupDevControls() {
   openLevelSwitcherButton.addEventListener("click", () =>
     openSubmenu(levelMenu, openLevelSwitcherButton, levelBack),
   );
+  openPickupSpawnerButton.addEventListener("click", () =>
+    openSubmenu(pickupMenu, openPickupSpawnerButton, pickupBack),
+  );
   openAssetScalingButton.addEventListener("click", () => {
     openSubmenu(assetScalingMenu, openAssetScalingButton, assetScalingBack);
     if (assetScaleTool) {
@@ -912,6 +928,7 @@ function setupDevControls() {
   });
   backButton.addEventListener("click", () => closeDevOverlay?.());
   levelBack.addEventListener("click", () => closeDevOverlay?.());
+  pickupBack.addEventListener("click", () => closeDevOverlay?.());
   assetScalingBack.addEventListener("click", () => closeDevOverlay?.());
   levelList
     .querySelectorAll<HTMLButtonElement>("[data-dev-level]")
@@ -919,6 +936,13 @@ function setupDevControls() {
       button.addEventListener("click", () => {
         const levelId = Number(button.dataset.devLevel) as LevelId;
         startRun(levelId);
+      });
+    });
+  pickupList
+    .querySelectorAll<HTMLButtonElement>("[data-dev-pickup]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        spawnDevPickup(button.dataset.devPickup as PickupId);
       });
     });
   document
@@ -956,8 +980,18 @@ function setupDevControls() {
     transitionTour() {
       startRun(1, "transition-tour");
     },
+    spawnPickup(pickupId) {
+      spawnDevPickup(pickupId);
+    },
   };
   applyDevSettings();
+}
+
+function spawnDevPickup(pickupId: PickupId) {
+  simulation.spawnPickup(
+    pickupId,
+    view.positionAlongCameraForward(simulation.railSpeed),
+  );
 }
 
 declare global {
@@ -973,6 +1007,7 @@ declare global {
       set: (name: DevSettingName, enabled?: boolean) => void;
       start: (levelId?: LevelId, overrides?: Partial<DevSettings>) => void;
       transitionTour: () => void;
+      spawnPickup: (pickupId: PickupId) => void;
     };
   }
 }

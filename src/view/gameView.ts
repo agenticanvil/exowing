@@ -28,6 +28,7 @@ import {
   levelIntroCameraPose,
 } from "./levelIntroCamera";
 import { levelOutroPose } from "./levelOutroCamera";
+import { PICKUPS } from "../pickups";
 
 const TURN_BANK = THREE.MathUtils.degToRad(20);
 const INPUT_BANK = THREE.MathUtils.degToRad(6);
@@ -68,6 +69,7 @@ export class GameView {
   private readonly composer: EffectComposer;
   private readonly fxaaPass = new FXAAPass();
   private readonly ship = new THREE.Group();
+  private readonly overshieldShell = createOvershieldShell();
   private readonly playerModels = new Map<PlayerModelId, THREE.Group>();
   private jetExhaust: JetExhaustView;
   private wingtipVortices?: WingtipVortexView;
@@ -76,6 +78,9 @@ export class GameView {
   private readonly enemyViews = new Map<EnemyId, EnemyInstanceView>();
   private readonly enemyDestructions: EnemyDestructionView;
   private readonly projectileViews = new Map<number, THREE.Group>();
+  private readonly pickupViews = new Map<number, THREE.Group>();
+  private readonly chainLightningViews = new Map<number, THREE.LineSegments>();
+  private readonly createPickup?: GameAssets["createPickup"];
   private readonly shotCoreGeometry = createBoltGeometry(0.085, 2.35, 12);
   private readonly shotGlowGeometry = createBoltGeometry(0.19, 2.9, 12);
   private readonly sky: SkyView;
@@ -94,6 +99,7 @@ export class GameView {
     assets?: GameAssets,
   ) {
     const environment = level.environment;
+    this.createPickup = assets?.createPickup;
     this.hasAtmosphere = environment.atmosphere;
     this.sunDirection = new THREE.Vector3(
       ...environment.sunDirection,
@@ -148,7 +154,7 @@ export class GameView {
     const initialPlayer = this.playerModels.get(this.activePlayerModelId);
     if (!initialPlayer)
       throw new Error("The default player model is unavailable.");
-    this.ship.add(initialPlayer);
+    this.ship.add(initialPlayer, this.overshieldShell);
     this.jetExhaust = new JetExhaustView(initialPlayer);
     this.scene.add(this.ship);
     const destructionSources = new Map<
@@ -253,6 +259,12 @@ export class GameView {
       turnBank + inputBank + barrelRoll + (outroPose?.shipRoll ?? 0);
     this.ship.rotation.x = outroPose?.shipPitch ?? gameplayShipPitch;
     this.ship.updateMatrixWorld(true);
+    const overshieldMaterial = this.overshieldShell
+      .material as THREE.MeshBasicMaterial;
+    this.overshieldShell.visible = sim.player.overshield > 0;
+    overshieldMaterial.opacity =
+      (0.14 + Math.sin(renderTime * 5) * 0.035) *
+      Math.min(1, sim.player.overshield / 3);
     this.wingtipVortices?.update(sim.railSpeed, renderDt);
     for (const [enemyId, enemyView] of this.enemyViews)
       syncEnemyInstances(
@@ -274,6 +286,18 @@ export class GameView {
       sim.projectiles,
       this.shotCoreGeometry,
       this.shotGlowGeometry,
+    );
+    syncPickups(
+      this.scene,
+      this.pickupViews,
+      sim.pickups,
+      renderTime,
+      this.createPickup,
+    );
+    syncChainLightnings(
+      this.scene,
+      this.chainLightningViews,
+      sim.chainLightnings,
     );
     const cameraPose =
       outroPose === undefined
@@ -358,7 +382,7 @@ export class GameView {
     this.jetExhaust.dispose();
     this.wingtipVortices?.dispose();
     this.ship.clear();
-    this.ship.add(model);
+    this.ship.add(model, this.overshieldShell);
     this.jetExhaust = new JetExhaustView(model);
     this.wingtipVortices = this.hasAtmosphere
       ? new WingtipVortexView(this.scene, model)
@@ -377,16 +401,29 @@ export class GameView {
     };
   }
 
+  positionAlongCameraForward(distance: number): Vec3 {
+    const direction = this.camera.getWorldDirection(new THREE.Vector3());
+    return {
+      x: this.ship.position.x + direction.x * distance,
+      y: this.ship.position.y + direction.y * distance,
+      z: this.ship.position.z + direction.z * distance,
+    };
+  }
+
   dispose() {
     window.removeEventListener("resize", this.resize);
     this.world.dispose();
     this.jetExhaust.dispose();
     this.wingtipVortices?.dispose();
     this.enemyDestructions.dispose();
+    disposeObject(this.overshieldShell);
     for (const model of this.playerModels.values()) disposeObject(model);
     this.ship.removeFromParent();
     for (const group of this.projectileViews.values())
       disposeObject(group, false);
+    for (const group of this.pickupViews.values()) disposeObject(group);
+    for (const lightning of this.chainLightningViews.values())
+      disposeObject(lightning);
     for (const enemyView of this.enemyViews.values())
       disposeObject(enemyView.mesh);
     this.shotCoreGeometry.dispose();
@@ -401,6 +438,8 @@ export class GameView {
     this.renderer.forceContextLoss();
     this.renderer.domElement.remove();
     this.projectileViews.clear();
+    this.pickupViews.clear();
+    this.chainLightningViews.clear();
   }
 
   private resize = () => {
@@ -594,6 +633,149 @@ function createPlaceholderEnemy() {
   );
 }
 
+function createOvershieldShell() {
+  const material = new THREE.MeshBasicMaterial({
+    color: new THREE.Color(0x49eaff).multiplyScalar(2.1),
+    transparent: true,
+    opacity: 0.16,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.BackSide,
+    toneMapped: false,
+  });
+  const shell = new THREE.Mesh(
+    new THREE.SphereGeometry(5.25, 32, 18),
+    material,
+  );
+  shell.scale.set(1.12, 0.45, 0.78);
+  shell.position.y = 0.3;
+  shell.visible = false;
+  shell.renderOrder = 3;
+  return shell;
+}
+
+function createPlaceholderPickup(pickupId: keyof typeof PICKUPS) {
+  const hue = Object.keys(PICKUPS).indexOf(pickupId) / 7;
+  const material = new THREE.MeshStandardMaterial({
+    color: new THREE.Color().setHSL(hue, 0.78, 0.58),
+    emissive: new THREE.Color().setHSL(hue, 0.72, 0.22),
+    roughness: 0.32,
+  });
+  const mesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.9, 1), material);
+  const group = new THREE.Group();
+  group.add(mesh);
+  return group;
+}
+
+function syncPickups(
+  scene: THREE.Scene,
+  views: Map<number, THREE.Group>,
+  states: FlightSimulation["pickups"],
+  renderTime: number,
+  createPickup?: GameAssets["createPickup"],
+) {
+  const live = new Set(states.map((state) => state.id));
+  for (const [id, group] of views)
+    if (!live.has(id)) {
+      disposeObject(group);
+      views.delete(id);
+    }
+  for (const state of states) {
+    let group = views.get(state.id);
+    if (!group) {
+      group =
+        createPickup?.(state.pickupId) ??
+        createPlaceholderPickup(state.pickupId);
+      group.scale.setScalar(1.55);
+      views.set(state.id, group);
+      scene.add(group);
+    }
+    group.position.set(
+      state.position.x,
+      state.position.y + Math.sin(renderTime * 2.2 + state.id) * 0.3,
+      state.position.z,
+    );
+    group.rotation.y = renderTime * 0.82 + state.id * 0.73;
+  }
+}
+
+function syncChainLightnings(
+  scene: THREE.Scene,
+  views: Map<number, THREE.LineSegments>,
+  states: FlightSimulation["chainLightnings"],
+) {
+  const live = new Set(states.map((state) => state.id));
+  for (const [id, line] of views)
+    if (!live.has(id)) {
+      disposeObject(line);
+      views.delete(id);
+    }
+  for (const state of states) {
+    let line = views.get(state.id);
+    if (!line) {
+      line = new THREE.LineSegments(
+        new THREE.BufferGeometry(),
+        new THREE.LineBasicMaterial({
+          color: new THREE.Color(0x72f7ff).multiplyScalar(4.2),
+          transparent: true,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          toneMapped: false,
+        }),
+      );
+      line.renderOrder = 8;
+      views.set(state.id, line);
+      scene.add(line);
+    }
+    const positions = lightningSegmentPositions(state);
+    line.geometry.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(positions, 3),
+    );
+    line.geometry.computeBoundingSphere();
+    (line.material as THREE.LineBasicMaterial).opacity = Math.max(
+      0,
+      1 - state.age / state.duration,
+    );
+  }
+}
+
+function lightningSegmentPositions(
+  state: FlightSimulation["chainLightnings"][number],
+) {
+  const positions: number[] = [];
+  const subdivisions = 7;
+  for (let arc = 0; arc < state.points.length - 1; arc++) {
+    const start = state.points[arc];
+    const end = state.points[arc + 1];
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const dz = end.z - start.z;
+    const horizontalLength = Math.hypot(dx, dz) || 1;
+    const perpendicular = {
+      x: -dz / horizontalLength,
+      z: dx / horizontalLength,
+    };
+    const pointAt = (step: number) => {
+      const progress = step / subdivisions;
+      const envelope = Math.sin(progress * Math.PI);
+      const phase = state.id * 1.91 + state.age * 92 + step * 2.37;
+      const jitter = Math.sin(phase) * 0.3 * envelope;
+      return {
+        x: start.x + dx * progress + perpendicular.x * jitter,
+        y: start.y + dy * progress + Math.cos(phase * 1.31) * 0.22 * envelope,
+        z: start.z + dz * progress + perpendicular.z * jitter,
+      };
+    };
+    for (let step = 0; step < subdivisions; step++) {
+      const from = pointAt(step);
+      const to = pointAt(step + 1);
+      positions.push(from.x, from.y, from.z, to.x, to.y, to.z);
+    }
+  }
+  return positions;
+}
+
 function syncProjectiles(
   scene: THREE.Scene,
   views: Map<number, THREE.Group>,
@@ -618,7 +800,7 @@ function syncProjectiles(
   for (const state of states) {
     let group = views.get(state.id);
     if (!group) {
-      group = createProjectileView(state.owner, coreGeometry, glowGeometry);
+      group = createProjectileView(state, coreGeometry, glowGeometry);
       views.set(state.id, group);
       scene.add(group);
     }
@@ -631,18 +813,27 @@ function syncProjectiles(
 }
 
 function createProjectileView(
-  owner: "player" | "enemy",
+  state: FlightSimulation["projectiles"][number],
   coreGeometry: THREE.BufferGeometry,
   glowGeometry: THREE.BufferGeometry,
 ) {
+  const owner = state.owner;
+  const isMissile = state.kind === "homing-missile";
+  const overcharged = state.overcharged === true;
   const color = new THREE.Color(
-    owner === "player" ? PLAYER_SHOT_COLOR : ENEMY_SHOT_COLOR,
+    isMissile
+      ? 0xffd34d
+      : owner === "player"
+        ? overcharged
+          ? 0x8c7bff
+          : PLAYER_SHOT_COLOR
+        : ENEMY_SHOT_COLOR,
   );
   const coreColor = color
     .clone()
     .lerp(new THREE.Color(0xffffff), 0.38)
-    .multiplyScalar(3.4);
-  const glowColor = color.clone().multiplyScalar(2.6);
+    .multiplyScalar(overcharged ? 5.4 : 3.4);
+  const glowColor = color.clone().multiplyScalar(overcharged ? 4.5 : 2.6);
   const core = new THREE.Mesh(
     coreGeometry,
     new THREE.MeshBasicMaterial({ color: coreColor }),
@@ -659,7 +850,8 @@ function createProjectileView(
   );
   const group = new THREE.Group();
   group.add(glow, core);
-  group.scale.y = owner === "player" ? 1.18 : 0.92;
+  group.scale.y = isMissile ? 1.65 : owner === "player" ? 1.18 : 0.92;
+  if (overcharged) group.scale.multiplyScalar(1.55);
   return group;
 }
 

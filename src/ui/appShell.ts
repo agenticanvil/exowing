@@ -1,4 +1,5 @@
 import { LEVEL_IDS, LEVELS } from "../levels";
+import { PICKUPS, PICKUP_IDS } from "../pickups";
 
 function menuRail(label: string, backId?: string, backLabel?: string) {
   return `<div class="menu__rail">${
@@ -58,7 +59,7 @@ export function mountAppShell(app: HTMLElement, dev = import.meta.env.DEV) {
         dev
           ? `<div class="menu" id="dev-menu" data-menu-depth="1" hidden>
         ${menuRail("DEV MENU", "dev-menu-back", "Back to previous menu")}
-        <div class="menu__panel"><header class="menu__header"><h1>DEV MENU</h1></header><div class="menu__actions">${menuAction("start-transition-tour", "TRANSITION TOUR", "ONE ENCOUNTER PER LEVEL", "dev-tour-button")}${menuAction("open-dev-settings", "DEV SETTINGS")}${menuAction("open-level-switcher", "SWITCH LEVEL")}${menuAction("open-asset-scaling", "ASSET SCALING")}</div></div>
+        <div class="menu__panel"><header class="menu__header"><h1>DEV MENU</h1></header><div class="menu__actions">${menuAction("start-transition-tour", "TRANSITION TOUR", "ONE ENCOUNTER PER LEVEL", "dev-tour-button")}${menuAction("open-dev-settings", "DEV SETTINGS")}${menuAction("open-level-switcher", "SWITCH LEVEL")}${menuAction("open-pickup-spawner", "SPAWN PICKUPS")}${menuAction("open-asset-scaling", "ASSET SCALING")}</div></div>
       </div>
 
       <div class="menu" id="dev-settings-menu" data-menu-depth="2" hidden>
@@ -69,6 +70,11 @@ export function mountAppShell(app: HTMLElement, dev = import.meta.env.DEV) {
       <div class="menu" id="dev-level-menu" data-menu-depth="2" hidden>
         ${menuRail("LEVELS", "dev-level-back", "Back to developer menu")}
         <div class="menu__panel"><header class="menu__header"><h1>SWITCH LEVEL</h1></header><div class="dev-level-list" id="dev-level-list">${LEVEL_IDS.map((id) => `<button type="button" data-dev-level="${id}" aria-label="Level ${id}, ${LEVELS[id].name}"><span>${id.toString().padStart(2, "0")}</span>${LEVELS[id].name.toUpperCase()}</button>`).join("")}</div></div>
+      </div>
+
+      <div class="menu" id="dev-pickup-menu" data-menu-depth="2" hidden>
+        ${menuRail("PICKUPS", "dev-pickup-back", "Back to developer menu")}
+        <div class="menu__panel"><header class="menu__header"><h1>SPAWN PICKUPS</h1></header><div class="dev-level-list" id="dev-pickup-list">${PICKUP_IDS.map((id) => `<button type="button" data-dev-pickup="${id}" aria-label="Spawn ${PICKUPS[id].label}"><span>+</span>${PICKUPS[id].label.toUpperCase()}</button>`).join("")}</div></div>
       </div>
 
       <div class="menu asset-scaling-menu" id="asset-scaling-menu" data-menu-depth="2" hidden>

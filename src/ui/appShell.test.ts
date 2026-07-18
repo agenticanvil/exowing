@@ -50,6 +50,10 @@ describe("mountAppShell", () => {
     expect(app.innerHTML).toContain('id="dev-level-back"');
     expect(app.innerHTML).toContain('id="open-asset-scaling"');
     expect(app.innerHTML).toContain('id="asset-scaling-menu"');
+    expect(app.innerHTML).toContain('id="open-pickup-spawner"');
+    expect(app.innerHTML).toContain('id="dev-pickup-menu"');
+    expect(app.innerHTML).toContain('data-dev-pickup="shield"');
+    expect(app.innerHTML).toContain('data-dev-pickup="chain-lightning"');
     expect(app.innerHTML).toContain('id="start-transition-tour"');
     expect(app.innerHTML).toContain("ONE ENCOUNTER PER LEVEL");
   });

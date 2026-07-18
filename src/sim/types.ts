@@ -1,4 +1,5 @@
 import type { EnemyControllerId, EnemyId, EnemyKind } from "../enemies";
+import type { PickupId } from "../pickups";
 
 export type { EnemyControllerId } from "../enemies";
 
@@ -18,6 +19,13 @@ export type PlayerState = {
   velocityX: number;
   velocityY: number;
   shield: number;
+  overshield: number;
+  overshieldTimeRemaining: number;
+  rapidFireTimeRemaining: number;
+  overchargedBoltsTimeRemaining: number;
+  spreadShotTimeRemaining: number;
+  homingMissiles: number;
+  chainLightningTimeRemaining: number;
   rollDirection: number;
   rollProgress: number;
 };
@@ -65,6 +73,20 @@ export type ProjectileState = {
   radius: number;
   owner: "player" | "enemy";
   damage?: number;
+  kind?: "bolt" | "homing-missile";
+  overcharged?: boolean;
+};
+export type PickupState = {
+  id: number;
+  pickupId: PickupId;
+  position: Vec3;
+  age: number;
+};
+export type ChainLightningState = {
+  id: number;
+  points: Vec3[];
+  age: number;
+  duration: number;
 };
 export type IslandState = {
   id: number;

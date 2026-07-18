@@ -2,10 +2,12 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { ENEMIES, enemyIdsForPlan, type EnemyId } from '../enemies';
 import { LEVELS, type LevelId } from '../levels';
+import { PICKUPS, PICKUP_IDS, type PickupId } from '../pickups';
 
 export type GameAssets = {
   createPlayer: (modelId?: PlayerModelId) => THREE.Group;
   createEnemy: (enemyId: EnemyId) => THREE.Mesh;
+  createPickup: (pickupId: PickupId) => THREE.Group;
 };
 
 export const PLAYER_MODEL_IDS = ['plane-1', 'plane-3'] as const;
@@ -77,6 +79,7 @@ const levelModels: Record<LevelId, readonly ModelAsset[]> = {
 
 const modelCache = new Map<string, Promise<LoadedModel>>();
 const enemyCache = new Map<EnemyId, Promise<THREE.Mesh>>();
+const pickupCache = new Map<PickupId, Promise<THREE.Group>>();
 
 export async function loadGameAssets(
   levelId: LevelId,
@@ -84,9 +87,10 @@ export async function loadGameAssets(
 ): Promise<GameAssets> {
   const models = [...Object.values(playerPlanes), ...levelModels[levelId]];
   const enemyIds = enemyIdsForPlan(LEVELS[levelId].enemies);
-  const totalAssets = models.length + enemyIds.length;
+  const totalAssets = models.length + enemyIds.length + PICKUP_IDS.length;
   const loaded = new Map<string, LoadedModel>();
   const loadedEnemies = new Map<EnemyId, THREE.Mesh>();
+  const loadedPickups = new Map<PickupId, THREE.Group>();
 
   for (let index = 0; index < models.length; index++) {
     const model = models[index];
@@ -112,6 +116,19 @@ export async function loadGameAssets(
     });
   }
 
+  for (let index = 0; index < PICKUP_IDS.length; index++) {
+    const pickupId = PICKUP_IDS[index];
+    onProgress?.({
+      loaded: models.length + enemyIds.length + index,
+      total: totalAssets,
+    });
+    loadedPickups.set(pickupId, await loadPickup(pickupId));
+    onProgress?.({
+      loaded: models.length + enemyIds.length + index + 1,
+      total: totalAssets,
+    });
+  }
+
   return {
     createPlayer: (modelId = 'plane-1') => {
       const player = loaded.get(playerPlanes[modelId].key);
@@ -123,7 +140,33 @@ export async function loadGameAssets(
       if (!enemy) throw new Error(`${ENEMIES[enemyId].label} is unavailable.`);
       return createMeshInstance(enemy);
     },
+    createPickup: (pickupId) => {
+      const pickup = loadedPickups.get(pickupId);
+      if (!pickup) throw new Error(`${PICKUPS[pickupId].label} is unavailable.`);
+      return createGroupInstance(pickup);
+    },
   };
+}
+
+function loadPickup(pickupId: PickupId): Promise<THREE.Group> {
+  const cached = pickupCache.get(pickupId);
+  if (cached) return cached;
+  const pickup = PICKUPS[pickupId];
+  const promise = new GLTFLoader().loadAsync(pickup.modelUrl).then((gltf) => {
+    gltf.scene.updateMatrixWorld(true);
+    const bounds = new THREE.Box3().setFromObject(gltf.scene);
+    const center = bounds.getCenter(new THREE.Vector3());
+    gltf.scene.position.sub(center);
+    const root = new THREE.Group();
+    root.add(gltf.scene);
+    return root;
+  }).catch((error: unknown) => {
+    pickupCache.delete(pickupId);
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Could not load ${pickup.label}: ${detail}`);
+  });
+  pickupCache.set(pickupId, promise);
+  return promise;
 }
 
 function loadEnemy(enemyId: EnemyId): Promise<THREE.Mesh> {
@@ -153,6 +196,18 @@ function createMeshInstance(source: THREE.Mesh): THREE.Mesh {
       ? source.material.map((material) => material.clone())
       : source.material.clone(),
   );
+}
+
+function createGroupInstance(source: THREE.Group): THREE.Group {
+  const instance = source.clone(true);
+  instance.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return;
+    object.geometry = object.geometry.clone();
+    object.material = Array.isArray(object.material)
+      ? object.material.map((material) => material.clone())
+      : object.material.clone();
+  });
+  return instance;
 }
 
 function loadModel(asset: ModelAsset): Promise<LoadedModel> {
