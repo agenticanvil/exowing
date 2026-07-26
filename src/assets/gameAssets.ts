@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { ENEMIES, enemyIdsForPlan, type EnemyId } from '../enemies';
 import { LEVELS, type LevelId } from '../levels';
 import { PICKUPS, PICKUP_IDS, type PickupId } from '../pickups';
@@ -174,12 +175,15 @@ function loadEnemy(enemyId: EnemyId): Promise<THREE.Mesh> {
   if (cached) return cached;
   const enemy = ENEMIES[enemyId];
   const promise = new GLTFLoader().loadAsync(enemy.modelUrl).then((gltf) => {
-    let mesh: THREE.Mesh | undefined;
+    const meshes: THREE.Mesh[] = [];
+    gltf.scene.updateMatrixWorld(true);
     gltf.scene.traverse((object) => {
-      if (!mesh && object instanceof THREE.Mesh) mesh = object;
+      if (object instanceof THREE.Mesh) meshes.push(object);
     });
-    if (!mesh) throw new Error(`The ${enemy.label} GLB contains no mesh.`);
-    return mesh;
+    if (meshes.length === 0)
+      throw new Error(`The ${enemy.label} GLB contains no mesh.`);
+    if (meshes.length === 1) return meshes[0];
+    return mergeEnemyMeshes(meshes, enemy.label);
   }).catch((error: unknown) => {
     enemyCache.delete(enemyId);
     const detail = error instanceof Error ? error.message : String(error);
@@ -187,6 +191,67 @@ function loadEnemy(enemyId: EnemyId): Promise<THREE.Mesh> {
   });
   enemyCache.set(enemyId, promise);
   return promise;
+}
+
+export function mergeEnemyMeshes(
+  meshes: readonly THREE.Mesh[],
+  label: string,
+) {
+  const geometries = meshes.map((mesh) => {
+    if (Array.isArray(mesh.material))
+      throw new Error(`${label} has an unsupported multi-material submesh.`);
+    let geometry = mesh.geometry.clone();
+    if (geometry.index) {
+      const nonIndexed = geometry.toNonIndexed();
+      geometry.dispose();
+      geometry = nonIndexed;
+    }
+    geometry.applyMatrix4(mesh.matrixWorld);
+    if (!geometry.getAttribute('normal')) geometry.computeVertexNormals();
+    const position = geometry.getAttribute('position');
+    if (!geometry.getAttribute('uv'))
+      geometry.setAttribute(
+        'uv',
+        new THREE.BufferAttribute(new Float32Array(position.count * 2), 2),
+      );
+    const sourceMaterial = mesh.material;
+    const baseColor =
+      sourceMaterial instanceof THREE.MeshStandardMaterial
+        ? sourceMaterial.color.clone()
+        : new THREE.Color(0xffffff);
+    const emissive =
+      sourceMaterial instanceof THREE.MeshStandardMaterial
+        ? sourceMaterial.emissive
+            .clone()
+            .multiplyScalar(sourceMaterial.emissiveIntensity * 0.35)
+        : new THREE.Color(0x000000);
+    baseColor.add(emissive);
+    const colors = new Float32Array(position.count * 3);
+    for (let index = 0; index < position.count; index += 1) {
+      colors[index * 3] = baseColor.r;
+      colors[index * 3 + 1] = baseColor.g;
+      colors[index * 3 + 2] = baseColor.b;
+    }
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    for (const attribute of Object.keys(geometry.attributes))
+      if (!['position', 'normal', 'uv', 'color'].includes(attribute))
+        geometry.deleteAttribute(attribute);
+    geometry.morphAttributes = {};
+    return geometry;
+  });
+  const geometry = mergeGeometries(geometries, false);
+  for (const source of geometries) source.dispose();
+  if (!geometry) throw new Error(`${label} submeshes could not be merged.`);
+  geometry.computeBoundingSphere();
+  return new THREE.Mesh(
+    geometry,
+    new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      vertexColors: true,
+      metalness: 0.34,
+      roughness: 0.48,
+    }),
+  );
 }
 
 function createMeshInstance(source: THREE.Mesh): THREE.Mesh {
