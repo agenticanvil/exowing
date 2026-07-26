@@ -8,7 +8,7 @@ import {
 } from "./railSystem";
 
 describe("railSystem", () => {
-  it("stays straight for the first 30 seconds", () => {
+  it("stays straight for the first 45 seconds", () => {
     const frame = railFrameAtDistance(TURN_START_DISTANCE);
     expect(frame.position).toEqual({ x: 0, y: 0, z: TURN_START_DISTANCE });
     expect(frame.heading).toBe(0);

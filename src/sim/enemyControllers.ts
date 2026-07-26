@@ -5,16 +5,16 @@ import type {
   ProjectileState,
   Vec3,
 } from "./types";
+import { ENEMIES } from "../enemies";
 import { railFrameAtDistance } from "./railSystem";
 
 const MAX_X = 14;
 const MIN_Y = 0.8;
 const MAX_Y = 13;
-const STANDARD_MAX_HORIZONTAL_SPEED = 7;
-const STANDARD_MAX_VERTICAL_SPEED = 5;
 const BOSS_CLOSE_DISTANCE = 36;
 const BOSS_MAX_HORIZONTAL_SPEED = 11;
 const BOSS_MAX_VERTICAL_SPEED = 8;
+const REINFORCEMENT_INTENSITY = 1.12;
 
 export type EnemyControlContext = {
   elapsed: number;
@@ -57,9 +57,10 @@ export function controlEnemy(
   dt: number,
 ): EnemyControl {
   const controller = enemy.controller ?? "standard";
+  const definition = ENEMIES[enemy.enemyId];
   const state = (enemy.controllerState ??= {
     decisionCooldown: (enemy.id % 7) * 0.04,
-    fireCooldown: 0.8 + (enemy.id % 5) * 0.31,
+    fireCooldown: definition.shot.interval * (0.55 + (enemy.id % 5) * 0.12),
     desiredX: 0,
     desiredY: 0,
     desiredDepthSpeed: 0,
@@ -89,7 +90,7 @@ function controlBoss(
       : signedNoise(decisionSeed + 47.1) * 4.5;
   }
   const fire = state.fireCooldown <= 0;
-  if (fire) state.fireCooldown = 0.62;
+  if (fire) state.fireCooldown = ENEMIES[enemy.enemyId].shot.interval;
   const edgeX =
     enemy.offsetX < -MAX_X + 3 ? 7 : enemy.offsetX > MAX_X - 3 ? -7 : 0;
   const edgeY =
@@ -116,10 +117,16 @@ function controlStandardEnemy(
   context: EnemyControlContext,
   dt: number,
 ): EnemyControl {
+  const definition = ENEMIES[enemy.enemyId];
+  const movement = definition.movement;
+  if (!movement)
+    throw new Error(`${definition.label} has no standard movement profile.`);
+  const intensity = enemy.waveIndex === 1 ? REINFORCEMENT_INTENSITY : 1;
   state.decisionCooldown -= dt;
   state.fireCooldown -= dt;
   if (state.decisionCooldown <= 0) {
-    state.decisionCooldown = 0.18 + (enemy.id % 4) * 0.035; // Human-sized reaction gap keeps dodges beatable.
+    state.decisionCooldown =
+      (movement.decisionInterval * (0.9 + (enemy.id % 4) * 0.07)) / intensity;
     const rail = railFrameAtDistance(enemy.railDistance);
     let avoidX = 0;
     let avoidY = 0;
@@ -136,9 +143,12 @@ function controlStandardEnemy(
       if (lateral * lateral + vertical * vertical < 12) {
         const bias =
           ((enemy.id + Math.floor(context.elapsed * 2)) & 1) === 0 ? -1 : 1;
-        avoidX += Math.abs(lateral) > 0.15 ? Math.sign(lateral) * 4 : bias * 4;
+        avoidX +=
+          (Math.abs(lateral) > 0.15 ? Math.sign(lateral) * 4 : bias * 4) *
+          movement.dodgeStrength;
         avoidY +=
-          Math.abs(vertical) > 0.15 ? Math.sign(vertical) * 2.5 : bias * 2;
+          (Math.abs(vertical) > 0.15 ? Math.sign(vertical) * 2.5 : bias * 2) *
+          movement.dodgeStrength;
       }
     }
 
@@ -150,23 +160,42 @@ function controlStandardEnemy(
       const distanceSquared = dx * dx + dy * dy + dz * dz;
       if (distanceSquared > 0.01 && distanceSquared < 25) {
         const strength = (5 - Math.sqrt(distanceSquared)) / 5;
-        avoidX += (dx / Math.sqrt(distanceSquared)) * strength * 5;
-        avoidY += (dy / Math.sqrt(distanceSquared)) * strength * 3;
+        avoidX +=
+          (dx / Math.sqrt(distanceSquared)) *
+          strength *
+          5 *
+          movement.separationStrength;
+        avoidY +=
+          (dy / Math.sqrt(distanceSquared)) *
+          strength *
+          3 *
+          movement.separationStrength;
       }
     }
 
-    const wander = Math.sin(context.elapsed * 1.15 + enemy.phase);
-    state.desiredX = avoidX + wander * 2.2;
+    state.desiredX =
+      avoidX +
+      Math.sin(context.elapsed * movement.horizontalFrequency + enemy.phase) *
+        movement.horizontalAmplitude *
+        intensity;
     state.desiredY =
-      avoidY + Math.cos(context.elapsed * 0.9 + enemy.phase) * 1.2;
+      avoidY +
+      Math.cos(context.elapsed * movement.verticalFrequency + enemy.phase) *
+        movement.verticalAmplitude *
+        intensity;
     state.desiredDepthSpeed =
-      Math.sin(context.elapsed * 0.48 + enemy.phase * 1.7) * 3.2;
+      Math.sin(context.elapsed * movement.depthFrequency + enemy.phase * 1.7) *
+      movement.depthAmplitude *
+      intensity;
   }
 
   const fire =
     state.fireCooldown <= 0 &&
-    distanceSquared(enemy.position, context.playerPosition) < 125 * 125;
-  if (fire) state.fireCooldown = 1.25 + (enemy.id % 6) * 0.17;
+    distanceSquared(enemy.position, context.playerPosition) <
+      definition.shot.range ** 2;
+  if (fire)
+    state.fireCooldown =
+      (definition.shot.interval * (0.9 + (enemy.id % 5) * 0.06)) / intensity;
   const edgeX =
     enemy.offsetX < -MAX_X + 2 ? 5 : enemy.offsetX > MAX_X - 2 ? -5 : 0;
   const edgeY =
@@ -174,13 +203,13 @@ function controlStandardEnemy(
   return {
     offsetVelocityX: clamp(
       state.desiredX + edgeX,
-      -STANDARD_MAX_HORIZONTAL_SPEED,
-      STANDARD_MAX_HORIZONTAL_SPEED,
+      -movement.maxHorizontalSpeed * intensity,
+      movement.maxHorizontalSpeed * intensity,
     ),
     offsetVelocityY: clamp(
       state.desiredY + edgeY,
-      -STANDARD_MAX_VERTICAL_SPEED,
-      STANDARD_MAX_VERTICAL_SPEED,
+      -movement.maxVerticalSpeed * intensity,
+      movement.maxVerticalSpeed * intensity,
     ),
     depthSpeed: state.desiredDepthSpeed,
     fire,

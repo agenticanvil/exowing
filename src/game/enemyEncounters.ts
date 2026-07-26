@@ -1,8 +1,7 @@
 import { ENEMIES, type LevelEnemyPlan, type StandardEnemyId } from "../enemies";
 import { SECTION_LENGTH, SECTION_SPAN } from "../sim/railSystem";
 
-const STREAM_AHEAD = 220;
-const WAVE_OFFSET = 130;
+const WAVE_OFFSET = 145;
 const ENEMY_SCATTER_LEAD = 42;
 
 const STANDARD_FORMATION = [
@@ -15,21 +14,26 @@ const STANDARD_FORMATION = [
 
 /** Reproduces the original two formations followed by the Riftmaw finale. */
 export function createStandardEnemyPlan(
-  standardEnemy: StandardEnemyId,
+  standardEnemy: StandardEnemyId | readonly [StandardEnemyId, StandardEnemyId],
 ): LevelEnemyPlan {
+  const [openingEnemy, reinforcementEnemy] =
+    typeof standardEnemy === "string"
+      ? [standardEnemy, standardEnemy]
+      : standardEnemy;
+
   return {
     waves: [
       {
         spawnAtRailDistance: 0,
         enemyRailDistance: WAVE_OFFSET,
         exitAtRailDistance: SECTION_LENGTH - ENEMY_SCATTER_LEAD,
-        groups: [{ enemy: standardEnemy, formation: STANDARD_FORMATION }],
+        groups: [{ enemy: openingEnemy, formation: STANDARD_FORMATION }],
       },
       {
-        spawnAtRailDistance: SECTION_SPAN + WAVE_OFFSET - STREAM_AHEAD,
+        spawnAtRailDistance: SECTION_SPAN,
         enemyRailDistance: SECTION_SPAN + WAVE_OFFSET,
         exitAtRailDistance: SECTION_SPAN + SECTION_LENGTH - ENEMY_SCATTER_LEAD,
-        groups: [{ enemy: standardEnemy, formation: STANDARD_FORMATION }],
+        groups: [{ enemy: reinforcementEnemy, formation: STANDARD_FORMATION }],
       },
       {
         spawnAtRailDistance: SECTION_SPAN * 2,

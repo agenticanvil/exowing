@@ -55,7 +55,7 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
   2: {
     id: 2,
     name: "Tempest Shards",
-    enemies: createStandardEnemyPlan("riftspike"),
+    enemies: createStandardEnemyPlan(["stormneedle-kite", "gloomjelly"]),
     environment: {
       atmosphere: true,
       wispyClouds: true,
@@ -85,7 +85,7 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
   3: {
     id: 3,
     name: "Sunscar Canyon",
-    enemies: createStandardEnemyPlan("riftspike"),
+    enemies: createStandardEnemyPlan("cinderback-bomber"),
     environment: {
       atmosphere: true,
       wispyClouds: true,
@@ -109,7 +109,7 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
   4: {
     id: 4,
     name: "Umbra Belt",
-    enemies: createStandardEnemyPlan("riftspike"),
+    enemies: createStandardEnemyPlan("gravemill"),
     environment: {
       atmosphere: false,
       wispyClouds: false,
@@ -133,7 +133,7 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
   5: {
     id: 5,
     name: "Frostspire Vale",
-    enemies: createStandardEnemyPlan("riftspike"),
+    enemies: createStandardEnemyPlan("cryofin-ray"),
     environment: {
       atmosphere: true,
       wispyClouds: true,
@@ -162,7 +162,7 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
   6: {
     id: 6,
     name: "Ironpine Basin",
-    enemies: createStandardEnemyPlan("thornwing"),
+    enemies: createStandardEnemyPlan("ironbark-hornet"),
     environment: {
       atmosphere: true,
       wispyClouds: true,

@@ -4,8 +4,37 @@ import {
   createStandardEnemyPlan,
   createTransitionTourPlan,
 } from "./enemyEncounters";
+import { RAIL_SPEED } from "../sim/railSystem";
 
 describe("createTransitionTourPlan", () => {
+  it("supports a different standard enemy for each formation", () => {
+    const plan = createStandardEnemyPlan([
+      "reefclaw-skimmer",
+      "tideglass-manta",
+    ]);
+
+    expect(plan.waves[0].groups[0].enemy).toBe("reefclaw-skimmer");
+    expect(plan.waves[1].groups[0].enemy).toBe("tideglass-manta");
+    expect(plan.waves[2].groups[0].enemy).toBe("riftmaw");
+  });
+
+  it("gives both standard formations the same roughly 45-second window", () => {
+    const plan = createStandardEnemyPlan("riftspike");
+    const standardWaves = plan.waves.slice(0, 2);
+    const windows = standardWaves.map(
+      (wave) =>
+        ((wave.exitAtRailDistance ?? 0) - wave.spawnAtRailDistance) /
+        RAIL_SPEED,
+    );
+    const startingGaps = standardWaves.map(
+      (wave) => wave.enemyRailDistance - wave.spawnAtRailDistance,
+    );
+
+    expect(windows[0]).toBeCloseTo(42.2);
+    expect(windows[1]).toBeCloseTo(windows[0]);
+    expect(startingGaps).toEqual([145, 145]);
+  });
+
   it("keeps only the boss and moves it near the level start", () => {
     const plan = createTransitionTourPlan(createStandardEnemyPlan("riftspike"));
 

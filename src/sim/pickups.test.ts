@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { LevelEnemyPlan } from "../enemies";
-import { PICKUP_EFFECTS, PICKUP_IDS, type PickupId } from "../pickups";
+import {
+  PICKUP_DROP_CHANCE,
+  PICKUP_EFFECTS,
+  PICKUP_IDS,
+  type PickupId,
+} from "../pickups";
 import { FlightSimulation } from "./flightSimulation";
 import { railOffsetPosition } from "./railSystem";
 import type { EnemyState } from "./types";
@@ -39,6 +44,10 @@ function enemy(id: number, x: number, z: number): EnemyState {
 }
 
 describe("pickups", () => {
+  it("averages one drop across a five-enemy standard encounter", () => {
+    expect(PICKUP_DROP_CHANCE * 5).toBe(1);
+  });
+
   it("applies every pickup type when collected", () => {
     const shield = new FlightSimulation({
       enemyPlan: noEnemies,

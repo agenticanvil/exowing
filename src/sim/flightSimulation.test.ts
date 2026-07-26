@@ -355,7 +355,7 @@ describe("FlightSimulation", () => {
     const sim = new FlightSimulation({ world: islandWorld() });
     for (let i = 0; i < 60 * 100; i++)
       sim.step({ steerX: 0, steerY: 0, fire: false, pace: 1 }, 1 / 60);
-    expect(sim.railDistance).toBeGreaterThan(SECTION_LENGTH * 5);
+    expect(sim.railDistance).toBeGreaterThan(SECTION_LENGTH * 3);
     const islands = sim.world.get<IslandSystem>("islands")!.islands;
     expect(islands.length).toBeGreaterThan(3);
     expect(islands.length).toBeLessThan(10);
@@ -385,11 +385,11 @@ describe("FlightSimulation", () => {
     const enemy = sim.enemies[0];
     const initialOffsetX = enemy.offsetX;
     const initialSpacing = enemy.railDistance - sim.railDistance;
-    for (let i = 0; i < 90; i++)
+    for (let i = 0; i < 240; i++)
       sim.step({ steerX: 0, steerY: 0, fire: i < 20, pace: 0 }, 1 / 60);
     expect(enemy.offsetX).not.toBe(initialOffsetX);
     expect(enemy.railDistance - sim.railDistance).not.toBeCloseTo(
-      initialSpacing - (15 - 7) * 1.5,
+      initialSpacing - (15 - 7) * 4,
     );
     expect(sim.projectiles.some((shot) => shot.owner === "enemy")).toBe(true);
   });
@@ -520,11 +520,11 @@ describe("FlightSimulation", () => {
       sim.step({ steerX: 0, steerY: 0, fire: false, pace: 1 }, 1 / 30);
     }
     expect(sim.boss).toBeDefined();
-    expect(sim.boss!.railDistance - sim.railDistance).toBeGreaterThan(100);
-    expect(sim.boss!.railDistance - sim.railDistance).toBeLessThan(140);
+    expect(sim.boss!.railDistance - sim.railDistance).toBeGreaterThan(135);
+    expect(sim.boss!.railDistance - sim.railDistance).toBeLessThan(150);
   });
 
-  it("compounds enemy health and hostile damage by twenty percent per level", () => {
+  it("compounds enemy health by twenty percent and damage by twelve percent per level", () => {
     const first = new FlightSimulation({ level: 1 });
     const third = new FlightSimulation({ level: 3 });
     expect(first.enemies[0].maxHealth).toBeCloseTo(1);
@@ -532,16 +532,30 @@ describe("FlightSimulation", () => {
 
     const second = new FlightSimulation({ level: 2 });
     second.enemies.length = 0;
-    second.projectiles.push({
+    second.projectiles.length = 0;
+    second.enemies.push({
       id: 9999,
-      position: railOffsetPosition(0, 0, 4),
-      velocity: { x: 0, y: 0, z: 0 },
-      radius: 2,
-      owner: "enemy",
-      damage: 1.2,
+      enemyId: "riftspike",
+      position: railOffsetPosition(100, 0, 4),
+      radius: 1.25,
+      railDistance: 100,
+      offsetX: 0,
+      offsetY: 4,
+      phase: 0,
+      waveIndex: 0,
+      controller: "standard",
+      controllerState: {
+        decisionCooldown: 1,
+        fireCooldown: 0,
+        desiredX: 0,
+        desiredY: 0,
+        desiredDepthSpeed: 0,
+      },
     });
-    second.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 1 / 60);
-    expect(second.player.shield).toBeCloseTo(3.8);
+    second.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 0);
+    expect(
+      second.projectiles.find((shot) => shot.owner === "enemy")?.damage,
+    ).toBeCloseTo(0.75 * 1.12);
   });
 
   it("can force every enemy to one-shot health for transition testing", () => {

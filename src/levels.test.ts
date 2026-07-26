@@ -73,12 +73,21 @@ describe("level definitions", () => {
     expect(LEVELS[6].environment.atmosphere).toBe(true);
   });
 
-  it("uses Thornwing as Ironpine Basin's standard enemy", () => {
+  it("assigns the new enemy roster to its level themes", () => {
     expect(
-      LEVELS[6].enemies.waves
-        .flatMap((wave) => wave.groups)
-        .filter((group) => group.enemy !== "riftmaw")
-        .map((group) => group.enemy),
-    ).toEqual(["thornwing", "thornwing"]);
+      Object.values(LEVELS).map((level) =>
+        level.enemies.waves
+          .flatMap((wave) => wave.groups)
+          .filter((group) => group.enemy !== "riftmaw")
+          .map((group) => group.enemy),
+      ),
+    ).toEqual([
+      ["riftspike", "riftspike"],
+      ["stormneedle-kite", "gloomjelly"],
+      ["cinderback-bomber", "cinderback-bomber"],
+      ["gravemill", "gravemill"],
+      ["cryofin-ray", "cryofin-ray"],
+      ["ironbark-hornet", "ironbark-hornet"],
+    ]);
   });
 });

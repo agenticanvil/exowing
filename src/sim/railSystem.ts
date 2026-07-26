@@ -1,7 +1,7 @@
 import type { Vec3 } from "./types";
 
 export const RAIL_SPEED = 15;
-export const SECTION_DURATION = 20;
+export const SECTION_DURATION = 45;
 export const SECTION_LENGTH = RAIL_SPEED * SECTION_DURATION;
 export const TURN_START_DISTANCE = SECTION_LENGTH;
 export const TURN_LENGTH = 60;
@@ -15,7 +15,7 @@ export type RailFrame = {
   heading: number;
 };
 
-/** Infinite, deterministic 30-second straights joined by alternating random-looking bends. */
+/** Infinite, deterministic 45-second straights joined by alternating random-looking bends. */
 export function railFrameAtDistance(distance: number): RailFrame {
   const safeDistance = Math.max(0, distance);
   const sectionIndex = Math.floor(safeDistance / SECTION_SPAN);

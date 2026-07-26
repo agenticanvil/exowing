@@ -92,6 +92,7 @@ export class FlightSimulation {
   private readonly oneShotEnemies: boolean;
   private readonly pickupDropChance: number;
   private readonly random: () => number;
+  private readonly damageMultiplier: number;
 
   constructor(
     options: {
@@ -124,6 +125,7 @@ export class FlightSimulation {
     };
     this.score = options.score ?? 0;
     this.difficultyMultiplier = 1.2 ** Math.max(0, (options.level ?? 1) - 1);
+    this.damageMultiplier = 1.12 ** Math.max(0, (options.level ?? 1) - 1);
     this.enemyPlan = options.enemyPlan ?? createStandardEnemyPlan("riftspike");
     this.oneShotEnemies = options.oneShotEnemies ?? false;
     this.world = options.world ?? createWorld([]);
@@ -738,11 +740,19 @@ export class FlightSimulation {
     const definition = ENEMIES[enemy.enemyId];
     const shotSpeed = definition.shot.speed;
     const leadTime = Math.min(1.2, distance / shotSpeed);
-    const error = Math.sin(enemy.id * 12.9898 + this.elapsed * 2.1) * 2.2;
+    const error =
+      Math.sin(enemy.id * 12.9898 + this.elapsed * 2.1) *
+      definition.shot.aimError;
     const target = {
-      x: playerPosition.x + playerVelocity.x * leadTime * 0.35 + error,
-      y: playerPosition.y + playerVelocity.y * leadTime * 0.35 + error * 0.35,
-      z: playerPosition.z + playerVelocity.z * leadTime * 0.35,
+      x:
+        playerPosition.x +
+        playerVelocity.x * leadTime * definition.shot.lead +
+        error,
+      y:
+        playerPosition.y +
+        playerVelocity.y * leadTime * definition.shot.lead +
+        error * 0.35,
+      z: playerPosition.z + playerVelocity.z * leadTime * definition.shot.lead,
     };
     if (this.world.lineOfFireBlocked(enemy.position, target)) return;
     const dx = target.x - enemy.position.x,
@@ -760,7 +770,7 @@ export class FlightSimulation {
         },
         radius: definition.shot.radius,
         owner: "enemy",
-        damage: definition.shot.damage * this.difficultyMultiplier,
+        damage: definition.shot.damage * this.damageMultiplier,
       });
   }
 }

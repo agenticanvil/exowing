@@ -75,7 +75,7 @@ export const PICKUPS: Record<PickupId, PickupDefinition> = {
   },
 };
 
-export const PICKUP_DROP_CHANCE = 0.5;
+export const PICKUP_DROP_CHANCE = 0.2;
 export const PICKUP_MAGNET_DISTANCE = 12;
 export const PICKUP_COLLECTION_DISTANCE = 1.8;
 
