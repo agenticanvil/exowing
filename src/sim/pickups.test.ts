@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { LevelEnemyPlan } from "../enemies";
 import {
+  PICKUP_IDS,
   PICKUP_DROP_CHANCE,
   PICKUP_EFFECTS,
-  PICKUP_IDS,
+  TACTICAL_PICKUP_IDS,
+  TIMED_PICKUP_IDS,
   type PickupId,
 } from "../pickups";
 import { FlightSimulation } from "./flightSimulation";
@@ -23,6 +25,10 @@ function collect(sim: FlightSimulation, pickupId: PickupId) {
     ),
   );
   sim.step(command, 0);
+}
+
+function activate(sim: FlightSimulation) {
+  sim.step({ ...command, activatePickup: true }, 0);
 }
 
 function enemy(id: number, x: number, z: number): EnemyState {
@@ -48,7 +54,7 @@ describe("pickups", () => {
     expect(PICKUP_DROP_CHANCE * 5).toBe(1);
   });
 
-  it("applies every pickup type when collected", () => {
+  it("applies instant pickups when collected", () => {
     const shield = new FlightSimulation({
       enemyPlan: noEnemies,
       shield: 2,
@@ -57,40 +63,63 @@ describe("pickups", () => {
     collect(shield, "shield");
     expect(shield.player.shield).toBe(4);
 
-    const expectedEffects: Array<
-      readonly [PickupId, keyof FlightSimulation["player"], number]
-    > = [
-      ["overshield", "overshield", PICKUP_EFFECTS.overshieldAmount],
-      [
-        "rapid-fire",
-        "rapidFireTimeRemaining",
-        PICKUP_EFFECTS.rapidFireDuration,
-      ],
-      [
-        "overcharged-bolts",
-        "overchargedBoltsTimeRemaining",
-        PICKUP_EFFECTS.overchargedBoltsDuration,
-      ],
-      [
-        "spread-shot",
-        "spreadShotTimeRemaining",
-        PICKUP_EFFECTS.spreadShotDuration,
-      ],
-      ["homing-missiles", "homingMissiles", PICKUP_EFFECTS.homingMissileAmmo],
-      [
-        "chain-lightning",
-        "chainLightningTimeRemaining",
-        PICKUP_EFFECTS.chainLightningDuration,
-      ],
-    ];
-    for (const [pickupId, property, expected] of expectedEffects) {
+    const missiles = new FlightSimulation({
+      enemyPlan: noEnemies,
+      pickupDropChance: 0,
+    });
+    collect(missiles, "homing-missiles");
+    expect(missiles.player.homingMissiles).toBe(
+      3 + PICKUP_EFFECTS.homingMissileAmmo,
+    );
+  });
+
+  it("stores timed pickups until the player activates them", () => {
+    for (const pickupId of TIMED_PICKUP_IDS) {
       const sim = new FlightSimulation({
         enemyPlan: noEnemies,
         pickupDropChance: 0,
       });
       collect(sim, pickupId);
-      expect(sim.player[property], pickupId).toBe(expected);
+      expect(sim.player.heldPickup, pickupId).toBe(pickupId);
+      expect(sim.activePickup, pickupId).toBeUndefined();
+
+      activate(sim);
+
+      expect(sim.player.heldPickup, pickupId).toBeNull();
+      expect(sim.activePickup, pickupId).toEqual({
+        pickupId,
+        timeRemaining: PICKUP_EFFECTS.timedDuration,
+      });
     }
+  });
+
+  it("holds one reserve pickup and allows another only after activation", () => {
+    const sim = new FlightSimulation({
+      enemyPlan: noEnemies,
+      pickupDropChance: 0,
+    });
+    collect(sim, "rapid-fire");
+    collect(sim, "spread-shot");
+
+    expect(sim.player.heldPickup).toBe("rapid-fire");
+    expect(sim.pickups).toEqual([
+      expect.objectContaining({ pickupId: "spread-shot" }),
+    ]);
+
+    activate(sim);
+    sim.step(command, 0);
+
+    expect(sim.activePickup?.pickupId).toBe("rapid-fire");
+    expect(sim.player.heldPickup).toBe("spread-shot");
+
+    activate(sim);
+    expect(sim.activePickup?.pickupId).toBe("rapid-fire");
+    expect(sim.player.heldPickup).toBe("spread-shot");
+
+    sim.step(command, PICKUP_EFFECTS.timedDuration);
+    activate(sim);
+    expect(sim.activePickup?.pickupId).toBe("spread-shot");
+    expect(sim.player.heldPickup).toBeNull();
   });
 
   it("pulls nearby pickups toward the player and leaves distant pickups still", () => {
@@ -98,8 +127,8 @@ describe("pickups", () => {
       enemyPlan: noEnemies,
       pickupDropChance: 0,
     });
-    sim.spawnPickup("shield", { x: 0, y: 4, z: 10 });
-    sim.spawnPickup("rapid-fire", { x: 0, y: 4, z: 30 });
+    sim.spawnPickup("rapid-fire", { x: 0, y: 4, z: 10 });
+    sim.spawnPickup("spread-shot", { x: 0, y: 4, z: 30 });
     const near = sim.pickups[0];
     const far = sim.pickups[1];
 
@@ -109,7 +138,8 @@ describe("pickups", () => {
     expect(far.position).toEqual({ x: 0, y: 4, z: 30 });
   });
 
-  it("drops a uniformly selected pickup on a configured enemy kill", () => {
+  it("drops from the full pickup pool on a configured enemy kill", () => {
+    expect(TACTICAL_PICKUP_IDS).toEqual(PICKUP_IDS);
     const randomValues = [0.1, 0.5];
     const sim = new FlightSimulation({
       pickupDropChance: 1,
@@ -132,47 +162,68 @@ describe("pickups", () => {
 
     expect(sim.pickups).toEqual([
       expect.objectContaining({
-        pickupId: PICKUP_IDS[3],
+        pickupId: TACTICAL_PICKUP_IDS[3],
         position: target.position,
       }),
     ]);
   });
 
-  it("creates rapid, spread, overcharged fire and limited homing missiles", () => {
-    const sim = new FlightSimulation({ pickupDropChance: 0 });
-    sim.enemies.length = 0;
-    collect(sim, "rapid-fire");
-    collect(sim, "spread-shot");
-    collect(sim, "overcharged-bolts");
+  it("keeps the weapon boosts distinct instead of stacking them", () => {
+    const rapid = new FlightSimulation({ pickupDropChance: 0 });
+    rapid.enemies.length = 0;
+    collect(rapid, "rapid-fire");
+    activate(rapid);
+    expect(rapid.step({ ...command, fire: true }, 0).shotsFired).toBe(1);
+    expect(rapid.step({ ...command, fire: true }, 0.12).shotsFired).toBe(1);
+
+    const spread = new FlightSimulation({ pickupDropChance: 0 });
+    spread.enemies.length = 0;
+    collect(spread, "spread-shot");
+    activate(spread);
+    expect(spread.step({ ...command, fire: true }, 0).shotsFired).toBe(3);
+    expect(
+      spread.projectiles
+        .filter((shot) => shot.kind === "bolt")
+        .every((shot) => shot.damage === PICKUP_EFFECTS.spreadShotDamage),
+    ).toBe(true);
+
+    const overcharged = new FlightSimulation({ pickupDropChance: 0 });
+    overcharged.enemies.length = 0;
+    collect(overcharged, "overcharged-bolts");
+    activate(overcharged);
+    expect(overcharged.step({ ...command, fire: true }, 0).shotsFired).toBe(1);
+    expect(overcharged.projectiles).toEqual([
+      expect.objectContaining({
+        kind: "bolt",
+        overcharged: true,
+        damage: PICKUP_EFFECTS.overchargedBoltDamageMultiplier,
+      }),
+    ]);
+  });
+
+  it("caps missile ammo and preserves reserved resources at construction", () => {
+    const sim = new FlightSimulation({
+      enemyPlan: noEnemies,
+      homingMissiles: 6,
+      heldPickup: "chain-lightning",
+      pickupDropChance: 0,
+    });
     collect(sim, "homing-missiles");
 
-    const first = sim.step({ ...command, fire: true }, 0);
-    expect(first.shotsFired).toBe(4);
-    expect(sim.projectiles.filter((shot) => shot.kind === "bolt")).toHaveLength(
-      3,
-    );
-    expect(
-      sim.projectiles
-        .filter((shot) => shot.kind === "bolt")
-        .every((shot) => shot.overcharged && shot.damage === 3),
-    ).toBe(true);
-    expect(
-      sim.projectiles.filter((shot) => shot.kind === "homing-missile"),
-    ).toHaveLength(1);
-    expect(sim.player.homingMissiles).toBe(
-      PICKUP_EFFECTS.homingMissileAmmo - 1,
-    );
-
-    const second = sim.step({ ...command, fire: true }, 0.09);
-    expect(second.shotsFired).toBe(4);
+    expect(sim.player.homingMissiles).toBe(PICKUP_EFFECTS.maxHomingMissiles);
+    expect(sim.player.heldPickup).toBe("chain-lightning");
   });
 
   it("steers homing missiles and chains damage through nearby enemies", () => {
     const homing = new FlightSimulation({ pickupDropChance: 0 });
     homing.enemies.length = 0;
     collect(homing, "homing-missiles");
-    homing.enemies.push(enemy(9_101, 9, 45));
-    homing.step({ ...command, fire: true }, 0);
+    const homingTarget = enemy(9_101, 9, 45);
+    homingTarget.scatterVelocity = undefined;
+    homing.enemies.push(homingTarget);
+    for (let frame = 0; frame < 24; frame++)
+      homing.step({ ...command, secondary: true }, 1 / 60);
+    homing.step({ ...command, secondary: false }, 0);
     const missile = homing.projectiles.find(
       (projectile) => projectile.kind === "homing-missile",
     )!;
@@ -184,6 +235,7 @@ describe("pickups", () => {
     chain.enemies.length = 0;
     chain.projectiles.length = 0;
     collect(chain, "chain-lightning");
+    activate(chain);
     const targets = [
       enemy(9_201, 0, 30),
       enemy(9_202, 6, 30),
@@ -212,6 +264,7 @@ describe("pickups", () => {
     const sim = new FlightSimulation({ pickupDropChance: 0 });
     sim.enemies.length = 0;
     collect(sim, "overshield");
+    activate(sim);
     sim.projectiles.push({
       id: 9_301,
       position: railOffsetPosition(0, 0, 4),

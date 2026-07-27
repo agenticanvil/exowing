@@ -1,5 +1,6 @@
 import { LEVEL_IDS, LEVELS } from "../levels";
 import { PICKUPS, PICKUP_IDS } from "../pickups";
+import { UPGRADES, UPGRADE_BRANCHES, type UpgradeId } from "../upgrades";
 
 function menuRail(label: string, backId?: string, backLabel?: string) {
   return `<div class="menu__rail">${
@@ -16,6 +17,15 @@ function menuAction(
   className = "",
 ) {
   return `<button ${className ? `class="${className}" ` : ""}id="${id}" type="button" aria-label="${label}"><span>${label}</span>${detail ? `<small>${detail}</small>` : ""}</button>`;
+}
+
+function upgradeNode(upgradeId: UpgradeId) {
+  const upgrade = UPGRADES[upgradeId];
+  return `<button class="upgrade-node" type="button" data-upgrade-id="${upgradeId}" data-upgrade-status="locked" aria-pressed="false"><span class="upgrade-node__tier">TIER ${upgrade.tier}</span><strong>${upgrade.label.toUpperCase()}</strong><span class="upgrade-node__state" data-upgrade-node-state>LOCKED</span></button>`;
+}
+
+function upgradeBranch(branch: (typeof UPGRADE_BRANCHES)[number]) {
+  return `<section class="upgrade-branch" data-upgrade-branch="${branch.id}" aria-labelledby="upgrade-branch-${branch.id}"><header><p id="upgrade-branch-${branch.id}">${branch.label.toUpperCase()}</p><span>${branch.specialty.toUpperCase()}</span></header><div class="upgrade-branch__root">${upgradeNode(branch.root)}</div><div class="upgrade-branch__fork" aria-label="Choose one">${branch.forks.map(upgradeNode).join("")}</div><div class="upgrade-branch__capstone">${upgradeNode(branch.capstone)}</div></section>`;
 }
 
 export function mountAppShell(app: HTMLElement, dev = import.meta.env.DEV) {
@@ -51,7 +61,7 @@ export function mountAppShell(app: HTMLElement, dev = import.meta.env.DEV) {
         ${menuRail("CONTROLS", "controls-back", "Back to pause menu")}
         <div class="menu__panel menu__panel--compact">
           <header class="menu__header"><h1>CONTROLS</h1></header>
-          <div class="controls"><dl><div><dt>MOVE</dt><dd>W A S D</dd></div><div><dt>BARREL ROLL / DODGE</dt><dd>Q / E</dd></div><div><dt>FIRE</dt><dd>SPACE</dd></div><div><dt>FASTER</dt><dd>SHIFT</dd></div><div><dt>BRAKE</dt><dd>ALT</dd></div><div><dt>PAUSE</dt><dd>ESC</dd></div></dl></div>
+          <div class="controls"><dl><div><dt>MOVE / AIM</dt><dd>W A S D</dd></div><div><dt>BARREL ROLL / DODGE</dt><dd>Q / E</dd></div><div><dt>PRIMARY FIRE</dt><dd>SPACE</dd></div><div><dt>LOCK / RELEASE MISSILES</dt><dd>F</dd></div><div><dt>ACTIVATE PICKUP</dt><dd>R</dd></div><div><dt>FASTER</dt><dd>SHIFT</dd></div><div><dt>BRAKE</dt><dd>ALT</dd></div><div><dt>PAUSE</dt><dd>ESC</dd></div></dl></div>
         </div>
       </div>
 
@@ -94,7 +104,8 @@ export function mountAppShell(app: HTMLElement, dev = import.meta.env.DEV) {
     <div class="loading-screen" id="loading-screen" hidden aria-live="polite" aria-busy="true"><div class="loading-screen__content"><p class="loading-screen__eyebrow" id="loading-eyebrow">LEVEL 01</p><h1 id="loading-title">AZURE REACH</h1><div class="loading-screen__track"><div class="loading-screen__fill" id="loading-fill"></div></div><p class="loading-screen__status" id="loading-status">LOADING</p><button id="loading-retry" type="button" hidden>RETRY</button></div></div>
     <section class="level-intro" id="level-intro" hidden aria-live="polite" aria-label="Level introduction"><div class="level-intro__shade"></div><div class="level-intro__content"><div class="level-intro__rule" aria-hidden="true"></div><p class="level-intro__eyebrow" id="level-intro-eyebrow">LEVEL 01</p><h1 id="level-intro-title">AZURE REACH</h1></div></section>
     <section class="level-results" id="level-results" hidden aria-live="polite" aria-label="Level results"><div class="level-results__scrim"></div><div class="level-results__card"><p class="level-results__eyebrow">MISSION COMPLETE</p><h1 id="level-results-title">AZURE REACH CLEARED</h1><div class="level-results__primary"><strong id="level-results-kill-percent">100%</strong><span>ENEMIES DESTROYED</span></div><dl class="level-results__grid"><div><dt>DESTROYED</dt><dd id="level-results-enemies">11 / 11</dd></div><div><dt>ACCURACY</dt><dd id="level-results-accuracy">100%</dd></div><div><dt>SHOTS FIRED</dt><dd id="level-results-shots">0</dd></div><div><dt>DAMAGE TAKEN</dt><dd id="level-results-damage">0</dd></div><div><dt>FLIGHT TIME</dt><dd id="level-results-time">00:00</dd></div><div><dt>LEVEL SCORE</dt><dd id="level-results-score">0000</dd></div></dl><button id="level-results-continue" type="button"><span>PRESS</span><kbd>SPACE</kbd><span>TO CONTINUE</span></button></div></section>
-    <div class="hud" id="hud" hidden><div class="hud__shield"><div class="hud__eyebrow"><span>SHIELD</span><span id="shield">100%</span></div><div class="hud__shield-track" role="meter" aria-label="Shield" aria-valuemin="0" aria-valuemax="5" aria-valuenow="5"><div class="hud__shield-fill" id="shield-fill"></div></div></div><div class="hud__score"><span class="hud__score-label">SCORE</span><span class="hud__score-value" id="score">0000</span></div><div class="hud__boss" id="boss-health" hidden><div class="hud__eyebrow"><span id="boss-health-name">GUARDIAN: RIFTMAW</span><span id="boss-health-value">100%</span></div><div class="hud__boss-track"><div class="hud__boss-fill" id="boss-health-fill"></div></div></div><div class="hud__fps" id="fps" hidden>FPS 0</div></div>`;
+    <section class="upgrade-screen" id="upgrade-screen" hidden aria-live="polite" aria-label="Choose a flight-system upgrade"><div class="upgrade-screen__scrim"></div><div class="upgrade-screen__panel"><header class="upgrade-screen__header"><div><p>FLIGHT SYSTEMS</p><h1>SELECT UPGRADE</h1></div><div class="upgrade-screen__mission"><span id="upgrade-next-level">NEXT SORTIE</span><strong id="upgrade-points-remaining">4 UPGRADES REMAIN AFTER THIS</strong></div></header><div class="upgrade-tree" id="upgrade-tree">${UPGRADE_BRANCHES.map(upgradeBranch).join("")}</div><aside class="upgrade-detail" aria-live="polite"><div class="upgrade-detail__copy"><span id="upgrade-detail-state">AVAILABLE</span><h2 id="upgrade-detail-label">CALIBRATED EMITTERS</h2><p id="upgrade-detail-effect">Primary weapons fire 15% faster.</p></div><dl><div><dt>UNLOCKS</dt><dd id="upgrade-detail-unlocks">Magnetic Bolts or Twin Bolts</dd></div><div><dt>TRADE-OFF</dt><dd id="upgrade-detail-tradeoff">Commits one upgrade point.</dd></div></dl><button id="upgrade-confirm" type="button">INSTALL UPGRADE</button></aside></div></section>
+    <div class="hud" id="hud" hidden><div class="hud__shield"><div class="hud__eyebrow"><span>SHIELD</span><span id="shield">100%</span></div><div class="hud__shield-track" role="meter" aria-label="Shield" aria-valuemin="0" aria-valuemax="5" aria-valuenow="5"><div class="hud__shield-fill" id="shield-fill"></div></div></div><div class="hud__ordnance"><span>MISSILES</span><strong id="missile-ammo">3</strong><span id="missile-locks">HOLD F TO LOCK</span></div><div class="hud__pickup"><span>RESERVE</span><strong id="pickup-reserve">EMPTY</strong><span id="pickup-status">NO PICKUP HELD</span></div><div class="hud__score"><span class="hud__score-label">SCORE</span><span class="hud__score-value" id="score">0000</span></div><div class="hud__boss" id="boss-health" hidden><div class="hud__eyebrow"><span id="boss-health-name">GUARDIAN: RIFTMAW</span><span id="boss-health-value">100%</span></div><div class="hud__boss-track"><div class="hud__boss-fill" id="boss-health-fill"></div></div></div><div class="hud__fps" id="fps" hidden>FPS 0</div></div>`;
 }
 
 export function requiredElement<T extends Element>(

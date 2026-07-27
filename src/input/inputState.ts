@@ -5,6 +5,7 @@ export class InputState {
   private enabled = true;
   private pendingFire = false;
   private pendingRoll = 0;
+  private pendingPickupActivation = false;
 
   constructor(
     private readonly target: Pick<
@@ -43,6 +44,8 @@ export class InputState {
       steerX: axis(this.pressed.has("KeyA"), this.pressed.has("KeyD")),
       steerY: axis(this.pressed.has("KeyS"), this.pressed.has("KeyW")),
       fire: this.pressed.has("Space") || this.pendingFire,
+      secondary: this.pressed.has("KeyF"),
+      activatePickup: this.pendingPickupActivation,
       pace: axis(
         this.pressed.has("AltLeft") || this.pressed.has("AltRight"),
         this.pressed.has("ShiftLeft") || this.pressed.has("ShiftRight"),
@@ -51,6 +54,7 @@ export class InputState {
     };
     this.pendingFire = false;
     this.pendingRoll = 0;
+    this.pendingPickupActivation = false;
     return command;
   }
 
@@ -59,6 +63,8 @@ export class InputState {
     if (event.code === "Space" || event.code.startsWith("Alt"))
       event.preventDefault();
     if (!event.repeat && event.code === "Space") this.pendingFire = true;
+    if (!event.repeat && event.code === "KeyR")
+      this.pendingPickupActivation = true;
     if (!event.repeat && (event.code === "KeyQ" || event.code === "KeyE")) {
       this.pendingRoll = event.code === "KeyQ" ? -1 : 1;
     }
@@ -69,6 +75,7 @@ export class InputState {
     this.pressed.clear();
     this.pendingFire = false;
     this.pendingRoll = 0;
+    this.pendingPickupActivation = false;
   };
 }
 

@@ -73,21 +73,37 @@ describe("level definitions", () => {
     expect(LEVELS[6].environment.atmosphere).toBe(true);
   });
 
-  it("assigns the new enemy roster to its level themes", () => {
+  it("assigns varied authored rosters and increasing enemy counts", () => {
+    const rosters = Object.values(LEVELS).map(
+      (level) =>
+        new Set(
+          level.enemies.waves
+            .flatMap((wave) => wave.groups)
+            .filter((group) => group.enemy !== "riftmaw")
+            .map((group) => group.enemy),
+        ),
+    );
+    expect(rosters).toEqual([
+      new Set(["riftspike"]),
+      new Set(["stormneedle-kite", "gloomjelly"]),
+      new Set(["cinderback-bomber", "thornwing"]),
+      new Set(["gravemill", "reefclaw-skimmer"]),
+      new Set(["cryofin-ray", "tideglass-manta"]),
+      new Set([
+        "ironbark-hornet",
+        "stormneedle-kite",
+        "gloomjelly",
+        "cinderback-bomber",
+        "cryofin-ray",
+      ]),
+    ]);
     expect(
       Object.values(LEVELS).map((level) =>
         level.enemies.waves
+          .slice(0, -1)
           .flatMap((wave) => wave.groups)
-          .filter((group) => group.enemy !== "riftmaw")
-          .map((group) => group.enemy),
+          .reduce((total, group) => total + group.formation.length, 0),
       ),
-    ).toEqual([
-      ["riftspike", "riftspike"],
-      ["stormneedle-kite", "gloomjelly"],
-      ["cinderback-bomber", "cinderback-bomber"],
-      ["gravemill", "gravemill"],
-      ["cryofin-ray", "cryofin-ray"],
-      ["ironbark-hornet", "ironbark-hornet"],
-    ]);
+    ).toEqual([14, 18, 19, 20, 21, 24]);
   });
 });

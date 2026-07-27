@@ -93,6 +93,334 @@ describe("FlightSimulation", () => {
     expect(Math.hypot(shot!.velocity.x, shot!.velocity.z)).toBeCloseTo(102);
   });
 
+  it("assists only a narrow forward target and rewards exact alignment", () => {
+    const sim = new FlightSimulation();
+    sim.enemies.length = 0;
+    sim.projectiles.length = 0;
+    sim.enemies.push({
+      id: 9_500,
+      enemyId: "riftspike",
+      position: railOffsetPosition(50, 0, 4),
+      radius: 1.25,
+      railDistance: 50,
+      offsetX: 0,
+      offsetY: 4,
+      phase: 0,
+      waveIndex: 0,
+      controller: "formation",
+      health: 5,
+      maxHealth: 5,
+    });
+
+    expect(sim.aimSolution).toMatchObject({
+      enemyId: 9_500,
+      precision: true,
+    });
+    sim.step({ steerX: 0, steerY: 0, fire: true, pace: 0 }, 0);
+    expect(
+      sim.projectiles.find((shot) => shot.owner === "player"),
+    ).toMatchObject({ damage: 1.5, precision: true });
+
+    sim.player.offsetX = -12;
+    expect(sim.aimSolution).toBeUndefined();
+  });
+
+  it("widens and strengthens aim assistance with magnetic bolts", () => {
+    const standard = new FlightSimulation();
+    const magnetic = new FlightSimulation({ upgrades: ["magnetic-bolts"] });
+    for (const sim of [standard, magnetic]) {
+      sim.enemies.length = 0;
+      sim.player.offsetX = -6;
+      sim.enemies.push({
+        id: 9_505,
+        enemyId: "riftspike",
+        position: railOffsetPosition(50, 0, 4),
+        radius: 1.25,
+        railDistance: 50,
+        offsetX: 0,
+        offsetY: 4,
+        phase: 0,
+        waveIndex: 0,
+        controller: "formation",
+        health: 5,
+        maxHealth: 5,
+      });
+    }
+
+    expect(standard.aimSolution).toBeUndefined();
+    expect(magnetic.aimSolution).toMatchObject({ enemyId: 9_505 });
+    expect(Math.abs(magnetic.aimSolution!.assistedDirection.x)).toBeGreaterThan(
+      0.04,
+    );
+  });
+
+  it("locks missiles while held and fires the salvo on release", () => {
+    const sim = new FlightSimulation();
+    sim.enemies.length = 0;
+    sim.projectiles.length = 0;
+    sim.enemies.push({
+      id: 9_510,
+      enemyId: "riftspike",
+      position: railOffsetPosition(50, 0, 4),
+      radius: 1.25,
+      railDistance: 50,
+      offsetX: 0,
+      offsetY: 4,
+      phase: 0,
+      waveIndex: 0,
+      controller: "formation",
+      health: 5,
+      maxHealth: 5,
+    });
+
+    for (let frame = 0; frame < 24; frame++)
+      sim.step(
+        { steerX: 0, steerY: 0, fire: false, secondary: true, pace: 0 },
+        1 / 60,
+      );
+    expect(sim.player.missileLockTargetIds).toEqual([9_510]);
+    expect(sim.projectiles.some((shot) => shot.kind === "homing-missile")).toBe(
+      false,
+    );
+
+    sim.step(
+      { steerX: 0, steerY: 0, fire: false, secondary: false, pace: 0 },
+      0,
+    );
+    expect(
+      sim.projectiles.find((shot) => shot.kind === "homing-missile"),
+    ).toMatchObject({ targetEnemyId: 9_510 });
+    expect(sim.player.homingMissiles).toBe(2);
+  });
+
+  it("can stack a full missile salvo onto a boss", () => {
+    const sim = new FlightSimulation();
+    sim.enemies.length = 0;
+    sim.projectiles.length = 0;
+    sim.enemies.push({
+      id: 9_520,
+      enemyId: "riftmaw",
+      position: railOffsetPosition(60, 0, 4),
+      radius: 3.5,
+      railDistance: 60,
+      offsetX: 0,
+      offsetY: 4,
+      phase: 0,
+      waveIndex: 0,
+      controller: "formation",
+      kind: "boss",
+      health: 24,
+      maxHealth: 24,
+    });
+
+    for (let frame = 0; frame < 66; frame++)
+      sim.step(
+        { steerX: 0, steerY: 0, fire: false, secondary: true, pace: 0 },
+        1 / 60,
+      );
+    expect(sim.player.missileLockTargetIds).toEqual([9_520, 9_520, 9_520]);
+    sim.step(
+      { steerX: 0, steerY: 0, fire: false, secondary: false, pace: 0 },
+      0,
+    );
+    expect(
+      sim.projectiles.filter((shot) => shot.kind === "homing-missile"),
+    ).toHaveLength(3);
+  });
+
+  it("keeps late-level hostile projectile pressure inside its budget", () => {
+    const sim = new FlightSimulation({ level: 6 });
+    sim.invulnerable = true;
+    let peakHostileProjectiles = 0;
+    for (let frame = 0; frame < 60 * 12; frame++) {
+      sim.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 1 / 60);
+      peakHostileProjectiles = Math.max(
+        peakHostileProjectiles,
+        sim.projectiles.filter((shot) => shot.owner === "enemy").length,
+      );
+    }
+    expect(peakHostileProjectiles).toBeGreaterThan(0);
+    expect(peakHostileProjectiles).toBeLessThanOrEqual(18);
+  });
+
+  it("applies persistent campaign upgrades to primary, locks, and shields", () => {
+    const sim = new FlightSimulation({
+      upgrades: ["twin-bolts", "extra-lock", "reinforced-shield"],
+    });
+    sim.projectiles.length = 0;
+    expect(sim.player.maxShield).toBe(6);
+    expect(sim.player.shield).toBe(6);
+    expect(sim.missileLockLimit).toBe(4);
+
+    const result = sim.step({ steerX: 0, steerY: 0, fire: true, pace: 0 }, 0);
+    expect(result.shotsFired).toBe(2);
+    expect(
+      sim.projectiles.filter((shot) => shot.owner === "player"),
+    ).toHaveLength(2);
+  });
+
+  it("applies calibrated emitters and heavy warheads", () => {
+    const standard = new FlightSimulation();
+    const calibrated = new FlightSimulation({
+      upgrades: ["calibrated-emitters"],
+    });
+    standard.projectiles.length = 0;
+    calibrated.projectiles.length = 0;
+    standard.step({ steerX: 0, steerY: 0, fire: true, pace: 0 }, 0);
+    calibrated.step({ steerX: 0, steerY: 0, fire: true, pace: 0 }, 0);
+
+    expect(
+      standard.step({ steerX: 0, steerY: 0, fire: true, pace: 0 }, 0.16)
+        .shotsFired,
+    ).toBe(0);
+    expect(
+      calibrated.step({ steerX: 0, steerY: 0, fire: true, pace: 0 }, 0.16)
+        .shotsFired,
+    ).toBe(1);
+
+    const heavy = new FlightSimulation({
+      upgrades: ["faster-lock", "heavy-warheads"],
+    });
+    heavy.enemies.length = 0;
+    heavy.projectiles.length = 0;
+    heavy.enemies.push({
+      id: 9_530,
+      enemyId: "riftmaw",
+      position: railOffsetPosition(60, 0, 4),
+      radius: 3.5,
+      railDistance: 60,
+      offsetX: 0,
+      offsetY: 4,
+      phase: 0,
+      waveIndex: 0,
+      controller: "formation",
+      kind: "boss",
+      health: 24,
+      maxHealth: 24,
+    });
+    for (let frame = 0; frame < 30; frame++)
+      heavy.step(
+        { steerX: 0, steerY: 0, fire: false, secondary: true, pace: 0 },
+        1 / 60,
+      );
+    heavy.step(
+      { steerX: 0, steerY: 0, fire: false, secondary: false, pace: 0 },
+      0,
+    );
+
+    expect(heavy.missileLockLimit).toBe(2);
+    expect(
+      heavy.projectiles.find((shot) => shot.kind === "homing-missile"),
+    ).toMatchObject({ damage: 6 });
+  });
+
+  it("retargets a destroyed missile target with salvo protocol", () => {
+    const sim = new FlightSimulation({ upgrades: ["salvo-protocol"] });
+    sim.enemies.length = 0;
+    sim.projectiles.length = 0;
+    sim.enemies.push({
+      id: 9_540,
+      enemyId: "riftspike",
+      position: railOffsetPosition(12, 0, 4),
+      radius: 1.25,
+      railDistance: 12,
+      offsetX: 0,
+      offsetY: 4,
+      phase: 0,
+      waveIndex: 0,
+      controller: "formation",
+      health: 5,
+      maxHealth: 5,
+    });
+    sim.projectiles.push({
+      id: 9_541,
+      position: railOffsetPosition(0, 0, 4),
+      velocity: { x: 0, y: 0, z: 70 },
+      radius: 0.55,
+      owner: "player",
+      damage: 4,
+      kind: "homing-missile",
+      targetEnemyId: 404,
+      retargetsRemaining: 1,
+    });
+
+    sim.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 0);
+
+    expect(sim.projectiles[0]).toMatchObject({
+      targetEnemyId: 9_540,
+      retargetsRemaining: 0,
+    });
+  });
+
+  it("triggers overdrive after ten primary hits", () => {
+    const sim = new FlightSimulation({ upgrades: ["overdrive-core"] });
+    sim.enemies.length = 0;
+    sim.projectiles.length = 0;
+    const enemy: EnemyState = {
+      id: 9_550,
+      enemyId: "riftspike",
+      position: railOffsetPosition(20, 0, 4),
+      radius: 1.25,
+      railDistance: 20,
+      offsetX: 0,
+      offsetY: 4,
+      phase: 0,
+      waveIndex: 0,
+      controller: "formation",
+      health: 100,
+      maxHealth: 100,
+    };
+    sim.enemies.push(enemy);
+    for (let hit = 0; hit < 10; hit++) {
+      sim.projectiles.push({
+        id: 10_000 + hit,
+        position: { ...enemy.position },
+        velocity: { x: 0, y: 0, z: 0 },
+        radius: 0.3,
+        owner: "player",
+        damage: 1,
+        kind: "bolt",
+      });
+      sim.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 0);
+    }
+
+    sim.step({ steerX: 0, steerY: 0, fire: true, pace: 0 }, 0);
+    expect(
+      sim.step({ steerX: 0, steerY: 0, fire: true, pace: 0 }, 0.13).shotsFired,
+    ).toBe(1);
+  });
+
+  it("delays a resolved encounter before spawning the next beat", () => {
+    const enemyPlan = {
+      waves: [
+        {
+          spawnAtRailDistance: 0,
+          enemyRailDistance: 50,
+          exitAtRailDistance: 0,
+          groups: [{ enemy: "riftspike", formation: [[0, 4]] }],
+        },
+        {
+          spawnAtRailDistance: 0,
+          enemyRailDistance: 70,
+          requiresPreviousWaveResolved: true,
+          spawnDelaySeconds: 5,
+          groups: [{ enemy: "thornwing", formation: [[0, 5]] }],
+        },
+      ],
+    } satisfies LevelEnemyPlan;
+    const sim = new FlightSimulation({ enemyPlan });
+
+    sim.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 0);
+    sim.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 4.9);
+    expect(sim.enemies.some((enemy) => enemy.enemyId === "thornwing")).toBe(
+      false,
+    );
+    sim.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 0.2);
+    expect(sim.enemies.some((enemy) => enemy.enemyId === "thornwing")).toBe(
+      true,
+    );
+  });
+
   it("ignores enemy shots when the final enemy dies in the same step", () => {
     const enemyPlan = {
       waves: [
@@ -173,6 +501,47 @@ describe("FlightSimulation", () => {
     expect(sim.player.offsetX).toBeLessThanOrEqual(14);
     expect(sim.player.rollDirection).toBe(1);
     expect(sim.player.rollProgress).toBe(1);
+  });
+
+  it("enforces roll recovery and applies the mutually exclusive roll upgrades", () => {
+    const standard = new FlightSimulation();
+    standard.step({ steerX: 0, steerY: 0, fire: false, pace: 0, roll: 1 }, 0);
+    standard.step({ steerX: 0, steerY: 0, fire: false, pace: 0, roll: 0 }, 0.5);
+    expect(standard.player.rollCooldownRemaining).toBe(1);
+    standard.step({ steerX: 0, steerY: 0, fire: false, pace: 0, roll: -1 }, 0);
+    expect(standard.player.rollDirection).toBe(1);
+
+    const phase = new FlightSimulation({ upgrades: ["phase-roll"] });
+    phase.step({ steerX: 0, steerY: 0, fire: false, pace: 0, roll: 1 }, 0);
+    phase.step({ steerX: 0, steerY: 0, fire: false, pace: 0, roll: 0 }, 0.5);
+    expect(phase.player.rollProgress).toBeCloseTo(5 / 6);
+    expect(phase.player.rollCooldownRemaining).toBe(0);
+    phase.step({ steerX: 0, steerY: 0, fire: false, pace: 0, roll: 0 }, 0.1);
+    expect(phase.player.rollProgress).toBe(1);
+    expect(phase.player.rollCooldownRemaining).toBe(1);
+
+    const reflex = new FlightSimulation({ upgrades: ["reflex-actuators"] });
+    reflex.step({ steerX: 0, steerY: 0, fire: false, pace: 0, roll: 1 }, 0);
+    reflex.step({ steerX: 0, steerY: 0, fire: false, pace: 0, roll: 0 }, 0.5);
+    expect(reflex.player.rollCooldownRemaining).toBe(0.8);
+  });
+
+  it("turns a close roll into faster fire with reflex core", () => {
+    const sim = new FlightSimulation({ upgrades: ["reflex-core"] });
+    sim.enemies.length = 0;
+    sim.projectiles.length = 0;
+    sim.projectiles.push({
+      id: 9_560,
+      position: railOffsetPosition(0, 0, 4),
+      velocity: { x: 0, y: 0, z: 0 },
+      radius: 0.3,
+      owner: "enemy",
+    });
+
+    sim.step({ steerX: 0, steerY: 0, fire: true, pace: 0, roll: 1 }, 0);
+    expect(
+      sim.step({ steerX: 0, steerY: 0, fire: true, pace: 0 }, 0.13).shotsFired,
+    ).toBe(1);
   });
 
   it("checks level geometry for player shots, not active enemy shots", () => {
@@ -418,7 +787,8 @@ describe("FlightSimulation", () => {
       },
     };
     sim.enemies.push(enemy);
-    sim.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 1 / 60);
+    for (let frame = 0; frame < 60; frame++)
+      sim.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 1 / 60);
     expect(enemy.scatterVelocity).toBeUndefined();
     expect(enemy.railDistance - sim.railDistance).toBeGreaterThan(13);
     expect(sim.projectiles.some((shot) => shot.owner === "enemy")).toBe(true);
@@ -524,11 +894,11 @@ describe("FlightSimulation", () => {
     expect(sim.boss!.railDistance - sim.railDistance).toBeLessThan(150);
   });
 
-  it("compounds enemy health by twenty percent and damage by twelve percent per level", () => {
+  it("keeps standard durability and projectile damage readable across levels", () => {
     const first = new FlightSimulation({ level: 1 });
     const third = new FlightSimulation({ level: 3 });
     expect(first.enemies[0].maxHealth).toBeCloseTo(1);
-    expect(third.enemies[0].maxHealth).toBeCloseTo(1.44);
+    expect(third.enemies[0].maxHealth).toBeCloseTo(1);
 
     const second = new FlightSimulation({ level: 2 });
     second.enemies.length = 0;
@@ -552,10 +922,11 @@ describe("FlightSimulation", () => {
         desiredDepthSpeed: 0,
       },
     });
-    second.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 0);
+    for (let frame = 0; frame < 90; frame++)
+      second.step({ steerX: 0, steerY: 0, fire: false, pace: 0 }, 1 / 60);
     expect(
       second.projectiles.find((shot) => shot.owner === "enemy")?.damage,
-    ).toBeCloseTo(0.75 * 1.12);
+    ).toBeCloseTo(0.75);
   });
 
   it("can force every enemy to one-shot health for transition testing", () => {

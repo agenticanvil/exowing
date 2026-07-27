@@ -25,7 +25,12 @@ describe("InputState", () => {
     );
     target.dispatch("keydown", "KeyD");
     target.dispatch("keydown", "KeyQ");
-    expect(input.command()).toMatchObject({ steerX: 1, roll: -1 });
+    target.dispatch("keydown", "KeyF");
+    expect(input.command()).toMatchObject({
+      steerX: 1,
+      secondary: true,
+      roll: -1,
+    });
     expect(input.command().roll).toBe(0);
   });
 
@@ -39,6 +44,18 @@ describe("InputState", () => {
 
     expect(input.command().fire).toBe(true);
     expect(input.command().fire).toBe(false);
+  });
+
+  it("queues one pickup activation per R press", () => {
+    const target = new FakeWindow();
+    const input = new InputState(
+      target as Pick<Window, "addEventListener" | "removeEventListener">,
+    );
+    target.dispatch("keydown", "KeyR");
+    target.dispatch("keyup", "KeyR");
+
+    expect(input.command().activatePickup).toBe(true);
+    expect(input.command().activatePickup).toBe(false);
   });
 
   it("clears and ignores gameplay keys while disabled", () => {

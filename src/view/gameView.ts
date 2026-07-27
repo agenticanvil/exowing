@@ -29,6 +29,7 @@ import {
 } from "./levelIntroCamera";
 import { levelOutroPose } from "./levelOutroCamera";
 import { PICKUPS } from "../pickups";
+import { createSoftParticleUniforms, SoftParticlePass } from "./softParticles";
 
 const TURN_BANK = THREE.MathUtils.degToRad(20);
 const INPUT_BANK = THREE.MathUtils.degToRad(6);
@@ -46,6 +47,7 @@ const RETICLE_FAR_DISTANCE = 46;
 type EnemyInstanceView = {
   mesh: THREE.InstancedMesh;
   hit: THREE.InstancedBufferAttribute;
+  attack: THREE.InstancedBufferAttribute;
   baseRadius: number;
 };
 export type GameViewSequence =
@@ -60,6 +62,7 @@ export type GameViewSequence =
 export class GameView {
   readonly renderer = new THREE.WebGLRenderer({ antialias: true });
   private readonly scene = new THREE.Scene();
+  private readonly softParticleScene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(
     DEFAULT_GAMEPLAY_CAMERA_FOV,
     1,
@@ -67,6 +70,7 @@ export class GameView {
     500,
   );
   private readonly composer: EffectComposer;
+  private readonly softParticleUniforms = createSoftParticleUniforms();
   private readonly fxaaPass = new FXAAPass();
   private readonly ship = new THREE.Group();
   private readonly overshieldShell = createOvershieldShell();
@@ -110,8 +114,23 @@ export class GameView {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = environment.exposure;
     container.append(this.renderer.domElement);
-    this.composer = new EffectComposer(this.renderer);
+    const composerTarget = new THREE.WebGLRenderTarget(
+      innerWidth,
+      innerHeight,
+      {
+        type: THREE.HalfFloatType,
+        depthTexture: new THREE.DepthTexture(innerWidth, innerHeight),
+      },
+    );
+    this.composer = new EffectComposer(this.renderer, composerTarget);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.composer.addPass(
+      new SoftParticlePass(
+        this.softParticleScene,
+        this.camera,
+        this.softParticleUniforms,
+      ),
+    );
     this.composer.addPass(
       new UnrealBloomPass(
         new THREE.Vector2(innerWidth, innerHeight),
@@ -129,6 +148,7 @@ export class GameView {
       FLIGHT_FOG_NEAR_DISTANCE,
       FLIGHT_FOG_FAR_DISTANCE,
     );
+    this.softParticleScene.fog = this.scene.fog;
 
     this.scene.add(
       new THREE.HemisphereLight(
@@ -175,7 +195,12 @@ export class GameView {
       source.geometry.computeBoundingSphere();
       const baseRadius = source.geometry.boundingSphere?.radius ?? 1;
       const hit = new THREE.InstancedBufferAttribute(new Float32Array(256), 1);
+      const attack = new THREE.InstancedBufferAttribute(
+        new Float32Array(256),
+        1,
+      );
       source.geometry.setAttribute("instanceHit", hit);
+      source.geometry.setAttribute("instanceAttack", attack);
       const mesh = new THREE.InstancedMesh(
         source.geometry,
         source.material,
@@ -183,7 +208,7 @@ export class GameView {
       );
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.count = 0;
-      this.enemyViews.set(enemyId, { mesh, hit, baseRadius });
+      this.enemyViews.set(enemyId, { mesh, hit, attack, baseRadius });
       this.scene.add(mesh);
       destructionSources.set(enemyId, {
         geometry: source.geometry,
@@ -194,6 +219,8 @@ export class GameView {
     }
     this.enemyDestructions = new EnemyDestructionView(
       this.scene,
+      this.softParticleScene,
+      this.softParticleUniforms,
       destructionSources,
     );
     for (const source of destructionSources.values()) source.material.dispose();
@@ -270,6 +297,7 @@ export class GameView {
       syncEnemyInstances(
         enemyView.mesh,
         enemyView.hit,
+        enemyView.attack,
         sim.enemies.filter((enemy) => enemy.enemyId === enemyId),
         enemyView.baseRadius,
         baseShipPosition,
@@ -336,7 +364,13 @@ export class GameView {
       sim.player.offsetY,
     );
     const firingDirection = { x: rail.forward.x, y: 0, z: rail.forward.z };
-    syncReticle(this.reticle, firingOrigin, firingDirection);
+    syncReticle(
+      this.reticle,
+      firingOrigin,
+      firingDirection,
+      sim.aimSolution,
+      sim.player.missileLockTargetIds,
+    );
     this.sky.update(this.camera.position, renderTime);
     this.sunLight.target.position.set(railCenter.x, railCenter.y, railCenter.z);
     this.sunLight.position
@@ -554,15 +588,40 @@ function syncReticle(
   reticle: ReturnType<typeof createReticle>,
   origin: Vec3,
   direction: Vec3,
+  solution:
+    | {
+        enemyId: number;
+        targetPosition: Vec3;
+        precision: boolean;
+      }
+    | undefined,
+  missileLockTargetIds: readonly number[],
 ) {
   const distances = [RETICLE_NEAR_DISTANCE, RETICLE_FAR_DISTANCE];
   for (let index = 0; index < reticle.markers.length; index++) {
     const marker = reticle.markers[index];
     const distance = distances[index];
-    marker.position.set(
-      origin.x + direction.x * distance,
-      origin.y + direction.y * distance,
-      origin.z + direction.z * distance,
+    if (index === 1 && solution)
+      marker.position.set(
+        solution.targetPosition.x,
+        solution.targetPosition.y,
+        solution.targetPosition.z,
+      );
+    else
+      marker.position.set(
+        origin.x + direction.x * distance,
+        origin.y + direction.y * distance,
+        origin.z + direction.z * distance,
+      );
+    const material = marker.material as THREE.SpriteMaterial;
+    material.color.setHex(
+      solution?.precision
+        ? 0x7effb2
+        : solution && missileLockTargetIds.includes(solution.enemyId)
+          ? 0xff83ec
+          : solution
+            ? 0xffd56a
+            : RETICLE_COLOR,
     );
   }
 }
@@ -897,6 +956,7 @@ const enemyUp = new THREE.Vector3(0, 1, 0);
 function syncEnemyInstances(
   mesh: THREE.InstancedMesh,
   hit: THREE.InstancedBufferAttribute,
+  attack: THREE.InstancedBufferAttribute,
   states: FlightSimulation["enemies"],
   baseRadius: number,
   playerPosition: { x: number; y: number; z: number },
@@ -918,9 +978,11 @@ function syncEnemyInstances(
     enemyMatrix.compose(enemyPosition, enemyRotation, enemyScale);
     mesh.setMatrixAt(index, enemyMatrix);
     hit.setX(index, state.hitFlash ?? 0);
+    attack.setX(index, state.attackTelegraph ?? 0);
   }
   mesh.instanceMatrix.needsUpdate = true;
   hit.needsUpdate = true;
+  attack.needsUpdate = true;
   mesh.computeBoundingSphere();
 }
 
@@ -929,20 +991,20 @@ function addInstancedHitFlash(material: THREE.Material, asset: EnemyId) {
     shader.vertexShader = shader.vertexShader
       .replace(
         "#include <common>",
-        "#include <common>\nattribute float instanceHit;\nvarying float vInstanceHit;",
+        "#include <common>\nattribute float instanceHit;\nattribute float instanceAttack;\nvarying float vInstanceHit;\nvarying float vInstanceAttack;",
       )
       .replace(
         "#include <begin_vertex>",
-        "#include <begin_vertex>\nvInstanceHit = instanceHit;",
+        "#include <begin_vertex>\nvInstanceHit = instanceHit;\nvInstanceAttack = instanceAttack;",
       );
     shader.fragmentShader = shader.fragmentShader
       .replace(
         "#include <common>",
-        "#include <common>\nvarying float vInstanceHit;",
+        "#include <common>\nvarying float vInstanceHit;\nvarying float vInstanceAttack;",
       )
       .replace(
         "#include <opaque_fragment>",
-        "outgoingLight = mix(outgoingLight, vec3(5.0), vInstanceHit);\n#include <opaque_fragment>",
+        "outgoingLight = mix(outgoingLight, vec3(3.4, 0.35, 0.08), vInstanceAttack * 0.82);\noutgoingLight = mix(outgoingLight, vec3(5.0), vInstanceHit);\n#include <opaque_fragment>",
       );
   };
   material.customProgramCacheKey = () => `${asset}-instanced-hit-v1`;

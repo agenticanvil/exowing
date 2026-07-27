@@ -25,7 +25,16 @@ import {
 } from "./game/levelStats";
 import type { GameViewSequence } from "./view/gameView";
 import { createTransitionTourPlan } from "./game/enemyEncounters";
-import type { PickupId } from "./pickups";
+import { PICKUPS, type PickupId } from "./pickups";
+import {
+  availableUpgrades,
+  hasUpgradeAfterLevel,
+  UPGRADES,
+  upgradeStatus,
+  upgradesUnlockedBy,
+  type UpgradeId,
+} from "./upgrades";
+import type { CampaignCarry } from "./sim/types";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("Missing app root");
@@ -63,6 +72,10 @@ const score = document.querySelector<HTMLSpanElement>("#score");
 const shield = requiredElement<HTMLSpanElement>("#shield");
 const shieldFill = requiredElement<HTMLDivElement>("#shield-fill");
 const shieldTrack = requiredElement<HTMLDivElement>(".hud__shield-track");
+const missileAmmo = requiredElement<HTMLElement>("#missile-ammo");
+const missileLocks = requiredElement<HTMLElement>("#missile-locks");
+const pickupReserve = requiredElement<HTMLElement>("#pickup-reserve");
+const pickupStatus = requiredElement<HTMLElement>("#pickup-status");
 const damageVignette = requiredElement<HTMLDivElement>("#damage-vignette");
 const levelTransition = requiredElement<HTMLDivElement>("#level-transition");
 const levelTransitionLabel = requiredElement<HTMLSpanElement>(
@@ -103,6 +116,30 @@ const levelResultsScore = requiredElement<HTMLElement>("#level-results-score");
 const levelResultsContinue = requiredElement<HTMLButtonElement>(
   "#level-results-continue",
 );
+const upgradeScreen = requiredElement<HTMLElement>("#upgrade-screen");
+const upgradeButtons = [
+  ...document.querySelectorAll<HTMLButtonElement>("[data-upgrade-id]"),
+];
+const upgradeNextLevel = requiredElement<HTMLElement>("#upgrade-next-level");
+const upgradePointsRemaining = requiredElement<HTMLElement>(
+  "#upgrade-points-remaining",
+);
+const upgradeDetailState = requiredElement<HTMLElement>(
+  "#upgrade-detail-state",
+);
+const upgradeDetailLabel = requiredElement<HTMLElement>(
+  "#upgrade-detail-label",
+);
+const upgradeDetailEffect = requiredElement<HTMLElement>(
+  "#upgrade-detail-effect",
+);
+const upgradeDetailUnlocks = requiredElement<HTMLElement>(
+  "#upgrade-detail-unlocks",
+);
+const upgradeDetailTradeoff = requiredElement<HTMLElement>(
+  "#upgrade-detail-tradeoff",
+);
+const upgradeConfirm = requiredElement<HTMLButtonElement>("#upgrade-confirm");
 const gameOverMenu = requiredElement<HTMLDivElement>("#game-over-menu");
 const retryButton = requiredElement<HTMLButtonElement>("#retry-button");
 const gameOverMainMenuButton = requiredElement<HTMLButtonElement>(
@@ -147,6 +184,9 @@ let accumulator = 0;
 let levelIntroStartedAt: number | null = null;
 let levelOutroStartedAt: number | null = null;
 let levelResultsVisible = false;
+let activeUpgrades: UpgradeId[] = [];
+let pendingUpgradeCarry: CampaignCarry | null = null;
+let previewedUpgradeId: UpgradeId | null = null;
 let levelStats = createLevelStats();
 type RunMode = "standard" | "transition-tour";
 let runMode: RunMode = "standard";
@@ -270,13 +310,11 @@ function styleForLevel(levelNumber: number): LevelId {
 
 function startRun(levelNumber: LevelId, mode: RunMode = "standard") {
   runMode = mode;
+  activeUpgrades = [];
   void startGame(levelNumber);
 }
 
-async function startGame(
-  levelNumber = 1,
-  carry?: { shield: number; score: number },
-) {
+async function startGame(levelNumber = 1, carry?: CampaignCarry) {
   if (loading) return;
   input.setEnabled(false);
   loading = true;
@@ -294,6 +332,7 @@ async function startGame(
     await nextPaint();
     currentLevelNumber = levelNumber;
     const level = LEVELS[levelId];
+    activeUpgrades = [...(carry?.upgrades ?? [])];
     activeEnemyPlan =
       runMode === "transition-tour"
         ? createTransitionTourPlan(level.enemies)
@@ -307,6 +346,7 @@ async function startGame(
       oneShotEnemies: runMode === "transition-tour",
       world,
       events: flightEvents,
+      upgrades: activeUpgrades,
     });
     levelStats = createLevelStats(simulation.score);
     view = new GameView(appRoot, level, world, assets);
@@ -326,6 +366,7 @@ async function startGame(
     damageVignette.classList.remove("damage-vignette--active");
     levelTransition.className = "level-transition";
     hideLevelResults();
+    hideUpgradeSelection();
     accumulator = 0;
     previous = performance.now();
     updateRenderResolution();
@@ -399,6 +440,14 @@ retryButton.addEventListener("click", () => {
 });
 loadingRetry.addEventListener("click", () => retryLoad?.());
 levelResultsContinue.addEventListener("click", continueAfterLevelResults);
+for (const button of upgradeButtons)
+  button.addEventListener("click", () => {
+    const upgradeId = button.dataset.upgradeId as UpgradeId | undefined;
+    if (upgradeId) previewUpgrade(upgradeId);
+  });
+upgradeConfirm.addEventListener("click", () => {
+  if (previewedUpgradeId) selectUpgrade(previewedUpgradeId);
+});
 gameOverMainMenuButton.addEventListener("click", returnToMainMenu);
 continueButton.addEventListener("click", continueGame);
 controlsButton.addEventListener("click", openControls);
@@ -584,7 +633,8 @@ function updateFrame(now: number) {
         ? { kind: "outro", ...outroProgress }
         : undefined;
   if (score) score.textContent = simulation.score.toString().padStart(4, "0");
-  const shieldPercent = (simulation.player.shield / 5) * 100;
+  const shieldPercent =
+    (simulation.player.shield / simulation.player.maxShield) * 100;
   shield.textContent = `${Math.round(shieldPercent)}%`;
   shieldFill.style.width = `${shieldPercent}%`;
   shieldFill.classList.toggle(
@@ -595,6 +645,28 @@ function updateFrame(now: number) {
     "aria-valuenow",
     simulation.player.shield.toString(),
   );
+  shieldTrack.setAttribute(
+    "aria-valuemax",
+    simulation.player.maxShield.toString(),
+  );
+  missileAmmo.textContent = simulation.player.homingMissiles.toString();
+  const lockCount = simulation.player.missileLockTargetIds.length;
+  missileLocks.textContent =
+    lockCount > 0
+      ? `${lockCount} / ${simulation.missileLockLimit} LOCKED`
+      : simulation.player.homingMissiles > 0
+        ? "HOLD F TO LOCK"
+        : "RACK EMPTY";
+  const heldPickup = simulation.player.heldPickup;
+  pickupReserve.textContent = heldPickup
+    ? PICKUPS[heldPickup].label.toUpperCase()
+    : "EMPTY";
+  const activePickup = simulation.activePickup;
+  pickupStatus.textContent = activePickup
+    ? `ACTIVE: ${PICKUPS[activePickup.pickupId].label.toUpperCase()} ${Math.ceil(activePickup.timeRemaining)}S`
+    : heldPickup
+      ? "PRESS R TO ACTIVATE"
+      : "NO PICKUP HELD";
   const boss = simulation.boss;
   const bossEngaged = boss && boss.railDistance - simulation.railDistance < 140;
   bossHealth.hidden = !bossEngaged;
@@ -742,13 +814,154 @@ function showLevelResults() {
 function continueAfterLevelResults() {
   if (!levelResultsVisible || !lifecycle.finishOutro()) return;
   const nextLevel = currentLevelNumber + 1;
-  const carry = { shield: simulation.player.shield, score: simulation.score };
+  const carry: CampaignCarry = {
+    shield: simulation.player.shield,
+    score: simulation.score,
+    homingMissiles: simulation.player.homingMissiles,
+    heldPickup: simulation.player.heldPickup,
+    upgrades: [...activeUpgrades],
+  };
+  if (runMode === "standard" && hasUpgradeAfterLevel(currentLevelNumber)) {
+    showUpgradeSelection(carry);
+    return;
+  }
+  transitionToNextLevel(nextLevel, carry);
+}
+
+function showUpgradeSelection(carry: CampaignCarry) {
+  pendingUpgradeCarry = carry;
+  previewedUpgradeId = null;
+  levelResults.hidden = true;
+  levelResultsVisible = false;
+  renderUpgradeTree(carry.upgrades);
+  const nextLevel = LEVELS[styleForLevel(currentLevelNumber + 1)];
+  upgradeNextLevel.textContent = `NEXT SORTIE: ${nextLevel.name.toUpperCase()}`;
+  const remainingAfterThis = Math.max(0, 5 - currentLevelNumber);
+  upgradePointsRemaining.textContent =
+    remainingAfterThis === 1
+      ? "1 UPGRADE REMAINS AFTER THIS"
+      : `${remainingAfterThis} UPGRADES REMAIN AFTER THIS`;
+  upgradeScreen.hidden = false;
+  const firstAvailable = availableUpgrades(carry.upgrades)[0];
+  if (!firstAvailable) return;
+  previewUpgrade(firstAvailable);
+  upgradeButtons
+    .find((button) => button.dataset.upgradeId === firstAvailable)
+    ?.focus();
+}
+
+function renderUpgradeTree(selectedUpgrades: readonly UpgradeId[]) {
+  for (const button of upgradeButtons) {
+    const upgradeId = button.dataset.upgradeId as UpgradeId;
+    const status = upgradeStatus(upgradeId, selectedUpgrades);
+    button.dataset.upgradeStatus = status;
+    button.setAttribute(
+      "aria-pressed",
+      (upgradeId === previewedUpgradeId).toString(),
+    );
+    button.classList.toggle(
+      "upgrade-node--previewed",
+      upgradeId === previewedUpgradeId,
+    );
+    const state = button.querySelector<HTMLElement>(
+      "[data-upgrade-node-state]",
+    );
+    if (state)
+      state.textContent = upgradeStatusLabel(
+        upgradeId,
+        status,
+        selectedUpgrades,
+      );
+  }
+}
+
+function previewUpgrade(upgradeId: UpgradeId) {
+  if (!pendingUpgradeCarry) return;
+  previewedUpgradeId = upgradeId;
+  renderUpgradeTree(pendingUpgradeCarry.upgrades);
+  const definition = UPGRADES[upgradeId];
+  const status = upgradeStatus(upgradeId, pendingUpgradeCarry.upgrades);
+  upgradeDetailState.textContent = upgradeStatusLabel(
+    upgradeId,
+    status,
+    pendingUpgradeCarry.upgrades,
+  );
+  upgradeDetailLabel.textContent = definition.label.toUpperCase();
+  upgradeDetailEffect.textContent = definition.detail;
+  const unlocked = upgradesUnlockedBy(upgradeId).map(
+    (candidate) => UPGRADES[candidate].label,
+  );
+  upgradeDetailUnlocks.textContent =
+    unlocked.length > 0
+      ? unlocked.join(" or ")
+      : "Final specialization upgrade.";
+  upgradeDetailTradeoff.textContent =
+    definition.tradeoff ?? "Commits one upgrade point.";
+  upgradeConfirm.disabled = status !== "available";
+  upgradeConfirm.textContent =
+    status === "available"
+      ? `INSTALL ${definition.label.toUpperCase()}`
+      : upgradeStatusLabel(upgradeId, status, pendingUpgradeCarry.upgrades);
+}
+
+function upgradeStatusLabel(
+  upgradeId: UpgradeId,
+  status: ReturnType<typeof upgradeStatus>,
+  selectedUpgrades: readonly UpgradeId[],
+) {
+  const definition = UPGRADES[upgradeId];
+  switch (status) {
+    case "selected":
+      return "INSTALLED";
+    case "available":
+      return "AVAILABLE";
+    case "excluded": {
+      const selectedExclusion = definition.excludes?.find((excluded) =>
+        selectedUpgrades.includes(excluded),
+      );
+      return selectedExclusion
+        ? `LOCKED BY ${UPGRADES[selectedExclusion].label.toUpperCase()}`
+        : "EXCLUDED";
+    }
+    case "locked": {
+      const requirements = definition.requirements ?? [];
+      const labels = requirements.map((required) =>
+        UPGRADES[required].label.toUpperCase(),
+      );
+      return labels.length > 0
+        ? `REQUIRES ${labels.join(definition.requirementMode === "any" ? " OR " : " + ")}`
+        : "LOCKED";
+    }
+  }
+}
+
+function selectUpgrade(upgradeId: UpgradeId) {
+  if (!pendingUpgradeCarry) return;
+  if (upgradeStatus(upgradeId, pendingUpgradeCarry.upgrades) !== "available")
+    return;
+  const carry = pendingUpgradeCarry;
+  pendingUpgradeCarry = null;
+  carry.upgrades = [...carry.upgrades, upgradeId];
+  if (upgradeId === "reinforced-shield")
+    carry.shield = Math.min(6, carry.shield + 1);
+  activeUpgrades = [...carry.upgrades];
+  hideUpgradeSelection();
+  transitionToNextLevel(currentLevelNumber + 1, carry);
+}
+
+function transitionToNextLevel(nextLevel: number, carry: CampaignCarry) {
   levelResults.classList.add("level-results--leaving");
   levelTransitionLabel.textContent = "";
   levelTransition.className = "level-transition level-transition--active";
   window.setTimeout(() => {
     void startGame(nextLevel, carry);
   }, 900);
+}
+
+function hideUpgradeSelection() {
+  upgradeScreen.hidden = true;
+  pendingUpgradeCarry = null;
+  previewedUpgradeId = null;
 }
 
 function hideLevelResults() {

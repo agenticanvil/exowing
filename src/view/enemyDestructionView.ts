@@ -1,6 +1,10 @@
 import * as THREE from "three";
 import type { EnemyId } from "../enemies";
 import type { EnemyDestructionState, Vec3 } from "../sim/types";
+import {
+  makeSoftParticleMaterial,
+  type SoftParticleUniforms,
+} from "./softParticles";
 
 type DestructionSource = {
   geometry: THREE.BufferGeometry;
@@ -32,6 +36,7 @@ type ParticleView = {
 
 type DestructionEffect = {
   root: THREE.Group;
+  smokeRoot: THREE.Group;
   fragments: FragmentView[];
   sparks: ParticleView;
   smoke: ParticleView;
@@ -55,6 +60,8 @@ export class EnemyDestructionView {
 
   constructor(
     private readonly scene: THREE.Scene,
+    private readonly softParticleScene: THREE.Scene,
+    private readonly softParticleUniforms: SoftParticleUniforms,
     sources: ReadonlyMap<EnemyId, DestructionSource>,
   ) {
     for (const [enemyId, source] of sources)
@@ -109,6 +116,7 @@ export class EnemyDestructionView {
 
     const fragmentMaterial = template.material.clone();
     fragmentMaterial.transparent = true;
+    fragmentMaterial.depthWrite = false;
     const fragments = template.fragments.map((fragment) => {
       const mesh = new THREE.Mesh(fragment.geometry, fragmentMaterial);
       const outward = fragment.center.clone().normalize();
@@ -154,19 +162,24 @@ export class EnemyDestructionView {
       state.radius * 0.45,
       scale,
       random,
-      new THREE.PointsMaterial({
-        map: this.particleTexture,
-        color: 0x29272a,
-        size: smokeBaseSize,
-        transparent: true,
-        opacity: 0,
-        depthWrite: false,
-      }),
+      makeSoftParticleMaterial(
+        new THREE.PointsMaterial({
+          map: this.particleTexture,
+          color: 0x29272a,
+          size: smokeBaseSize,
+          transparent: true,
+          opacity: 0,
+        }),
+        this.softParticleUniforms,
+      ),
       0.7,
       3.2,
       1.8,
     );
-    root.add(sparks.points, smoke.points);
+    root.add(sparks.points);
+    const smokeRoot = root.clone(false);
+    smokeRoot.add(smoke.points);
+    this.softParticleScene.add(smokeRoot);
 
     const flash = new THREE.Sprite(
       new THREE.SpriteMaterial({
@@ -186,6 +199,7 @@ export class EnemyDestructionView {
 
     return {
       root,
+      smokeRoot,
       fragments,
       sparks,
       smoke,
@@ -200,6 +214,7 @@ export class EnemyDestructionView {
 
   private disposeEffect(effect: DestructionEffect) {
     effect.root.removeFromParent();
+    effect.smokeRoot.removeFromParent();
     const fragmentMaterial = effect.fragments[0]?.mesh.material;
     if (fragmentMaterial instanceof THREE.Material) fragmentMaterial.dispose();
     effect.sparks.points.geometry.dispose();

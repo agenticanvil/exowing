@@ -13,8 +13,12 @@ export type EnemyId =
 export type StandardEnemyId = Exclude<EnemyId, "riftmaw">;
 export type EnemyKind = "standard" | "boss";
 export type EnemyControllerId = "standard" | "formation" | "boss";
+export type EnemyMovementRole = "strafe" | "dive" | "artillery" | "formation";
+export type EnemyAttackPattern =
+  "aimed-burst" | "fan-gap" | "sweep" | "heavy-darts" | "boss";
 
 export type EnemyMovementDefinition = {
+  role: EnemyMovementRole;
   decisionInterval: number;
   dodgeStrength: number;
   separationStrength: number;
@@ -40,6 +44,8 @@ export type EnemyDefinition = {
   retreatSpeed: number;
   movement?: EnemyMovementDefinition;
   shot: {
+    pattern: EnemyAttackPattern;
+    telegraph: number;
     speed: number;
     radius: number;
     damage: number;
@@ -69,6 +75,7 @@ export const ENEMIES: Record<EnemyId, EnemyDefinition> = {
     forwardSpeed: 7,
     retreatSpeed: 32,
     movement: {
+      role: "strafe",
       decisionInterval: 0.2,
       dodgeStrength: 0.85,
       separationStrength: 1,
@@ -82,6 +89,8 @@ export const ENEMIES: Record<EnemyId, EnemyDefinition> = {
       maxVerticalSpeed: 4.5,
     },
     shot: {
+      pattern: "aimed-burst",
+      telegraph: 0.5,
       speed: 38,
       radius: 0.25,
       damage: 0.75,
@@ -109,6 +118,7 @@ export const ENEMIES: Record<EnemyId, EnemyDefinition> = {
     forwardSpeed: 7,
     retreatSpeed: 32,
     movement: {
+      role: "dive",
       decisionInterval: 0.17,
       dodgeStrength: 1.1,
       separationStrength: 1,
@@ -122,6 +132,8 @@ export const ENEMIES: Record<EnemyId, EnemyDefinition> = {
       maxVerticalSpeed: 5.5,
     },
     shot: {
+      pattern: "aimed-burst",
+      telegraph: 0.48,
       speed: 40,
       radius: 0.24,
       damage: 0.7,
@@ -149,6 +161,7 @@ export const ENEMIES: Record<EnemyId, EnemyDefinition> = {
     forwardSpeed: 6.5,
     retreatSpeed: 31,
     movement: {
+      role: "artillery",
       decisionInterval: 0.28,
       dodgeStrength: 0.55,
       separationStrength: 1.2,
@@ -162,6 +175,8 @@ export const ENEMIES: Record<EnemyId, EnemyDefinition> = {
       maxVerticalSpeed: 3.5,
     },
     shot: {
+      pattern: "heavy-darts",
+      telegraph: 0.7,
       speed: 36,
       radius: 0.28,
       damage: 0.75,
@@ -189,6 +204,7 @@ export const ENEMIES: Record<EnemyId, EnemyDefinition> = {
     forwardSpeed: 7.5,
     retreatSpeed: 34,
     movement: {
+      role: "formation",
       decisionInterval: 0.2,
       dodgeStrength: 0.9,
       separationStrength: 1,
@@ -202,6 +218,8 @@ export const ENEMIES: Record<EnemyId, EnemyDefinition> = {
       maxVerticalSpeed: 4.5,
     },
     shot: {
+      pattern: "sweep",
+      telegraph: 0.58,
       speed: 35,
       radius: 0.23,
       damage: 0.4,
@@ -229,6 +247,7 @@ export const ENEMIES: Record<EnemyId, EnemyDefinition> = {
     forwardSpeed: 9,
     retreatSpeed: 38,
     movement: {
+      role: "dive",
       decisionInterval: 0.13,
       dodgeStrength: 1.3,
       separationStrength: 0.85,
@@ -242,6 +261,8 @@ export const ENEMIES: Record<EnemyId, EnemyDefinition> = {
       maxVerticalSpeed: 6.5,
     },
     shot: {
+      pattern: "aimed-burst",
+      telegraph: 0.42,
       speed: 52,
       radius: 0.2,
       damage: 0.65,
@@ -269,6 +290,7 @@ export const ENEMIES: Record<EnemyId, EnemyDefinition> = {
     forwardSpeed: 5.8,
     retreatSpeed: 28,
     movement: {
+      role: "artillery",
       decisionInterval: 0.32,
       dodgeStrength: 0.45,
       separationStrength: 1.3,
@@ -282,6 +304,8 @@ export const ENEMIES: Record<EnemyId, EnemyDefinition> = {
       maxVerticalSpeed: 4,
     },
     shot: {
+      pattern: "fan-gap",
+      telegraph: 0.75,
       speed: 31,
       radius: 0.28,
       damage: 0.32,
@@ -309,6 +333,7 @@ export const ENEMIES: Record<EnemyId, EnemyDefinition> = {
     forwardSpeed: 5.5,
     retreatSpeed: 27,
     movement: {
+      role: "artillery",
       decisionInterval: 0.4,
       dodgeStrength: 0.25,
       separationStrength: 1.35,
@@ -322,6 +347,8 @@ export const ENEMIES: Record<EnemyId, EnemyDefinition> = {
       maxVerticalSpeed: 2.8,
     },
     shot: {
+      pattern: "heavy-darts",
+      telegraph: 0.78,
       speed: 29,
       radius: 0.36,
       damage: 0.44,
@@ -349,6 +376,7 @@ export const ENEMIES: Record<EnemyId, EnemyDefinition> = {
     forwardSpeed: 5.2,
     retreatSpeed: 26,
     movement: {
+      role: "artillery",
       decisionInterval: 0.34,
       dodgeStrength: 0.35,
       separationStrength: 1.4,
@@ -362,6 +390,8 @@ export const ENEMIES: Record<EnemyId, EnemyDefinition> = {
       maxVerticalSpeed: 3.2,
     },
     shot: {
+      pattern: "fan-gap",
+      telegraph: 0.82,
       speed: 26,
       radius: 0.42,
       damage: 0.9,
@@ -389,6 +419,7 @@ export const ENEMIES: Record<EnemyId, EnemyDefinition> = {
     forwardSpeed: 8,
     retreatSpeed: 35,
     movement: {
+      role: "strafe",
       decisionInterval: 0.16,
       dodgeStrength: 1.1,
       separationStrength: 0.95,
@@ -402,6 +433,8 @@ export const ENEMIES: Record<EnemyId, EnemyDefinition> = {
       maxVerticalSpeed: 5.8,
     },
     shot: {
+      pattern: "sweep",
+      telegraph: 0.55,
       speed: 45,
       radius: 0.23,
       damage: 0.38,
@@ -429,6 +462,7 @@ export const ENEMIES: Record<EnemyId, EnemyDefinition> = {
     forwardSpeed: 8.5,
     retreatSpeed: 36,
     movement: {
+      role: "dive",
       decisionInterval: 0.14,
       dodgeStrength: 1.25,
       separationStrength: 0.8,
@@ -442,6 +476,8 @@ export const ENEMIES: Record<EnemyId, EnemyDefinition> = {
       maxVerticalSpeed: 6.5,
     },
     shot: {
+      pattern: "aimed-burst",
+      telegraph: 0.4,
       speed: 48,
       radius: 0.2,
       damage: 0.25,
@@ -467,6 +503,8 @@ export const ENEMIES: Record<EnemyId, EnemyDefinition> = {
     forwardSpeed: 7,
     retreatSpeed: 32,
     shot: {
+      pattern: "boss",
+      telegraph: 0.65,
       speed: 48,
       radius: 0.34,
       damage: 0.48,
@@ -489,12 +527,16 @@ export type EnemyGroupDefinition = {
   formation: readonly EnemyFormationPoint[];
   railSpacing?: number;
   phaseOffset?: number;
+  guaranteedDrop?: "shield" | "homing-missiles" | "overcharged-bolts";
 };
 
 export type EnemyWaveDefinition = {
   spawnAtRailDistance: number;
   enemyRailDistance: number;
+  enemyDistanceAhead?: number;
   exitAtRailDistance?: number;
+  durationSeconds?: number;
+  spawnDelaySeconds?: number;
   requiresPreviousWaveResolved?: boolean;
   groups: readonly EnemyGroupDefinition[];
 };

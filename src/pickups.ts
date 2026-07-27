@@ -9,6 +9,15 @@ export const PICKUP_IDS = [
 ] as const;
 
 export type PickupId = (typeof PICKUP_IDS)[number];
+export const TIMED_PICKUP_IDS = [
+  "overshield",
+  "rapid-fire",
+  "overcharged-bolts",
+  "spread-shot",
+  "chain-lightning",
+] as const;
+export type TimedPickupId = (typeof TIMED_PICKUP_IDS)[number];
+export const TACTICAL_PICKUP_IDS = PICKUP_IDS;
 
 export type PickupDefinition = {
   id: PickupId;
@@ -82,10 +91,14 @@ export const PICKUP_COLLECTION_DISTANCE = 1.8;
 export const PICKUP_EFFECTS = {
   shieldRestore: 2,
   overshieldAmount: 3,
-  overshieldDuration: 12,
-  rapidFireDuration: 12,
-  overchargedBoltsDuration: 12,
-  spreadShotDuration: 12,
-  homingMissileAmmo: 6,
-  chainLightningDuration: 12,
+  timedDuration: 10,
+  rapidFireIntervalMultiplier: 0.65,
+  overchargedBoltDamageMultiplier: 2,
+  spreadShotDamage: 0.65,
+  homingMissileAmmo: 4,
+  maxHomingMissiles: 8,
 } as const;
+
+export function isTimedPickup(pickupId: PickupId): pickupId is TimedPickupId {
+  return (TIMED_PICKUP_IDS as readonly PickupId[]).includes(pickupId);
+}

@@ -1,5 +1,6 @@
 import type { EnemyControllerId, EnemyId, EnemyKind } from "../enemies";
-import type { PickupId } from "../pickups";
+import type { PickupId, TimedPickupId } from "../pickups";
+import type { UpgradeId } from "../upgrades";
 
 export type { EnemyControllerId } from "../enemies";
 
@@ -9,6 +10,8 @@ export type PlayerCommand = {
   steerX: number;
   steerY: number;
   fire: boolean;
+  secondary?: boolean;
+  activatePickup?: boolean;
   pace: number;
   roll?: number;
 };
@@ -19,23 +22,36 @@ export type PlayerState = {
   velocityX: number;
   velocityY: number;
   shield: number;
+  maxShield: number;
   overshield: number;
   overshieldTimeRemaining: number;
   rapidFireTimeRemaining: number;
   overchargedBoltsTimeRemaining: number;
   spreadShotTimeRemaining: number;
   homingMissiles: number;
+  heldPickup: TimedPickupId | null;
+  missileLockTargetIds: number[];
+  missileLockProgress: number;
   chainLightningTimeRemaining: number;
   rollDirection: number;
   rollProgress: number;
+  rollCooldownRemaining: number;
 };
 
 export type EnemyControllerState = {
   decisionCooldown: number;
-  fireCooldown: number;
+  dodgeCooldown?: number;
+  /** Legacy field retained for deterministic fixture compatibility. */
+  fireCooldown?: number;
   desiredX: number;
   desiredY: number;
   desiredDepthSpeed: number;
+};
+export type EnemyAttackState = {
+  cooldown: number;
+  telegraphRemaining: number;
+  telegraphDuration: number;
+  patternStep: number;
 };
 
 export type EnemyState = {
@@ -55,7 +71,11 @@ export type EnemyState = {
   exitRailDistance?: number;
   controller?: EnemyControllerId;
   controllerState?: EnemyControllerState;
+  attackState?: EnemyAttackState;
+  attackTelegraph?: number;
   scatterVelocity?: Vec3;
+  exitAtElapsed?: number;
+  guaranteedDrop?: PickupId;
 };
 export type EnemyDestructionState = {
   id: number;
@@ -74,7 +94,10 @@ export type ProjectileState = {
   owner: "player" | "enemy";
   damage?: number;
   kind?: "bolt" | "homing-missile";
+  targetEnemyId?: number;
+  retargetsRemaining?: number;
   overcharged?: boolean;
+  precision?: boolean;
 };
 export type PickupState = {
   id: number;
@@ -104,4 +127,12 @@ export type FlightStepResult = {
   playerHits: number;
   bossDefeated: boolean;
   levelComplete: boolean;
+};
+
+export type CampaignCarry = {
+  shield: number;
+  score: number;
+  homingMissiles: number;
+  heldPickup: TimedPickupId | null;
+  upgrades: UpgradeId[];
 };

@@ -91,6 +91,23 @@ describe("mountAppShell", () => {
     expect(app.innerHTML).toContain('id="level-results-continue"');
   });
 
+  it("includes missile feedback and the campaign upgrade tree", () => {
+    const app = { innerHTML: "" } as HTMLElement;
+
+    mountAppShell(app, false);
+
+    expect(app.innerHTML).toContain('id="missile-ammo"');
+    expect(app.innerHTML).toContain('id="missile-locks"');
+    expect(app.innerHTML).toContain('id="pickup-reserve"');
+    expect(app.innerHTML).toContain('id="pickup-status"');
+    expect(app.innerHTML).toContain('id="upgrade-screen"');
+    expect(app.innerHTML).toContain('data-upgrade-branch="gunnery"');
+    expect(app.innerHTML).toContain('data-upgrade-id="magnetic-bolts"');
+    expect(app.innerHTML).toContain('id="upgrade-confirm"');
+    expect(app.innerHTML).toContain("LOCK / RELEASE MISSILES");
+    expect(app.innerHTML).toContain("ACTIVATE PICKUP");
+  });
+
   it("keeps the between-level cover free of a level-number card", () => {
     const app = { innerHTML: "" } as HTMLElement;
 

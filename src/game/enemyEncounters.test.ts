@@ -1,12 +1,35 @@
 import { describe, expect, it } from "vitest";
 import type { LevelEnemyPlan } from "../enemies";
 import {
+  createAuthoredEnemyPlan,
   createStandardEnemyPlan,
   createTransitionTourPlan,
 } from "./enemyEncounters";
 import { RAIL_SPEED } from "../sim/railSystem";
 
 describe("createTransitionTourPlan", () => {
+  it("builds four responsive beats and a delayed boss finale", () => {
+    const plan = createAuthoredEnemyPlan([
+      {
+        groups: [{ enemy: "riftspike", formation: [[0, 4]] }],
+      },
+      {
+        groups: [{ enemy: "thornwing", formation: [[0, 5]] }],
+      },
+    ]);
+
+    expect(plan.waves).toHaveLength(3);
+    expect(plan.waves[0]).toMatchObject({
+      durationSeconds: 24,
+      requiresPreviousWaveResolved: false,
+    });
+    expect(plan.waves[1]).toMatchObject({
+      spawnDelaySeconds: 5,
+      requiresPreviousWaveResolved: true,
+    });
+    expect(plan.waves[2].groups[0].enemy).toBe("riftmaw");
+  });
+
   it("supports a different standard enemy for each formation", () => {
     const plan = createStandardEnemyPlan([
       "reefclaw-skimmer",

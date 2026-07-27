@@ -5,7 +5,10 @@ import { asteroidBelt } from "./world/asteroidBeltSystem";
 import { alpineSnowfields } from "./world/alpineSnowfieldsSystem";
 import { borealForest } from "./world/borealForestSystem";
 import type { LevelEnemyPlan } from "./enemies";
-import { createStandardEnemyPlan } from "./game/enemyEncounters";
+import {
+  createAuthoredEnemyPlan,
+  ENCOUNTER_FORMATIONS,
+} from "./game/enemyEncounters";
 import type {
   LevelEnvironment,
   WorldSystemDefinition,
@@ -25,7 +28,44 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
   1: {
     id: 1,
     name: "Azure Reach",
-    enemies: createStandardEnemyPlan("riftspike"),
+    enemies: createAuthoredEnemyPlan([
+      {
+        groups: [{ enemy: "riftspike", formation: ENCOUNTER_FORMATIONS.line4 }],
+        durationSeconds: 20,
+      },
+      {
+        groups: [
+          {
+            enemy: "riftspike",
+            formation: [
+              [-6, 6],
+              [0, 4],
+              [6, 6],
+            ],
+            guaranteedDrop: "homing-missiles",
+          },
+        ],
+        durationSeconds: 20,
+      },
+      {
+        groups: [{ enemy: "riftspike", formation: ENCOUNTER_FORMATIONS.line4 }],
+        durationSeconds: 21,
+      },
+      {
+        groups: [
+          {
+            enemy: "riftspike",
+            formation: [
+              [-7, 3],
+              [0, 7],
+              [7, 3],
+            ],
+            guaranteedDrop: "shield",
+          },
+        ],
+        durationSeconds: 21,
+      },
+    ]),
     environment: {
       atmosphere: true,
       wispyClouds: true,
@@ -55,7 +95,70 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
   2: {
     id: 2,
     name: "Tempest Shards",
-    enemies: createStandardEnemyPlan(["stormneedle-kite", "gloomjelly"]),
+    enemies: createAuthoredEnemyPlan([
+      {
+        groups: [
+          {
+            enemy: "stormneedle-kite",
+            formation: ENCOUNTER_FORMATIONS.line4,
+          },
+        ],
+        durationSeconds: 21,
+      },
+      {
+        groups: [
+          {
+            enemy: "gloomjelly",
+            formation: ENCOUNTER_FORMATIONS.line4,
+            guaranteedDrop: "homing-missiles",
+          },
+        ],
+        durationSeconds: 22,
+      },
+      {
+        groups: [
+          {
+            enemy: "stormneedle-kite",
+            formation: [
+              [-7, 4],
+              [0, 7],
+              [7, 4],
+            ],
+          },
+          {
+            enemy: "gloomjelly",
+            formation: [
+              [-3, 3],
+              [3, 3],
+            ],
+            phaseOffset: 0.8,
+          },
+        ],
+        durationSeconds: 23,
+      },
+      {
+        groups: [
+          {
+            enemy: "gloomjelly",
+            formation: [
+              [-8, 6],
+              [0, 4],
+              [8, 6],
+            ],
+          },
+          {
+            enemy: "stormneedle-kite",
+            formation: [
+              [-4, 8],
+              [4, 8],
+            ],
+            phaseOffset: 1.1,
+            guaranteedDrop: "overcharged-bolts",
+          },
+        ],
+        durationSeconds: 24,
+      },
+    ]),
     environment: {
       atmosphere: true,
       wispyClouds: true,
@@ -85,7 +188,70 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
   3: {
     id: 3,
     name: "Sunscar Canyon",
-    enemies: createStandardEnemyPlan("cinderback-bomber"),
+    enemies: createAuthoredEnemyPlan([
+      {
+        groups: [
+          {
+            enemy: "cinderback-bomber",
+            formation: ENCOUNTER_FORMATIONS.line4,
+          },
+        ],
+        durationSeconds: 23,
+      },
+      {
+        groups: [
+          {
+            enemy: "thornwing",
+            formation: ENCOUNTER_FORMATIONS.wedge5,
+            guaranteedDrop: "homing-missiles",
+          },
+        ],
+        durationSeconds: 22,
+      },
+      {
+        groups: [
+          {
+            enemy: "cinderback-bomber",
+            formation: [
+              [-7, 6],
+              [0, 4],
+              [7, 6],
+            ],
+          },
+          {
+            enemy: "thornwing",
+            formation: [
+              [-3, 8],
+              [3, 8],
+            ],
+            phaseOffset: 0.7,
+          },
+        ],
+        durationSeconds: 24,
+      },
+      {
+        groups: [
+          {
+            enemy: "cinderback-bomber",
+            formation: [
+              [-9, 4],
+              [-3, 7],
+              [3, 7],
+            ],
+          },
+          {
+            enemy: "thornwing",
+            formation: [
+              [7, 4],
+              [10, 7],
+            ],
+            phaseOffset: 1.2,
+            guaranteedDrop: "shield",
+          },
+        ],
+        durationSeconds: 25,
+      },
+    ]),
     environment: {
       atmosphere: true,
       wispyClouds: true,
@@ -109,7 +275,67 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
   4: {
     id: 4,
     name: "Umbra Belt",
-    enemies: createStandardEnemyPlan("gravemill"),
+    enemies: createAuthoredEnemyPlan([
+      {
+        groups: [
+          { enemy: "gravemill", formation: ENCOUNTER_FORMATIONS.cross5 },
+        ],
+        durationSeconds: 24,
+      },
+      {
+        groups: [
+          {
+            enemy: "reefclaw-skimmer",
+            formation: ENCOUNTER_FORMATIONS.wedge5,
+            guaranteedDrop: "homing-missiles",
+          },
+        ],
+        durationSeconds: 23,
+      },
+      {
+        groups: [
+          {
+            enemy: "gravemill",
+            formation: [
+              [-8, 4],
+              [0, 7],
+              [8, 4],
+            ],
+          },
+          {
+            enemy: "reefclaw-skimmer",
+            formation: [
+              [-4, 8],
+              [4, 8],
+            ],
+            phaseOffset: 0.9,
+          },
+        ],
+        durationSeconds: 25,
+      },
+      {
+        groups: [
+          {
+            enemy: "reefclaw-skimmer",
+            formation: [
+              [-9, 3],
+              [-4, 7],
+              [0, 4],
+            ],
+          },
+          {
+            enemy: "gravemill",
+            formation: [
+              [5, 7],
+              [9, 3],
+            ],
+            phaseOffset: 1.3,
+            guaranteedDrop: "overcharged-bolts",
+          },
+        ],
+        durationSeconds: 26,
+      },
+    ]),
     environment: {
       atmosphere: false,
       wispyClouds: false,
@@ -133,7 +359,68 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
   5: {
     id: 5,
     name: "Frostspire Vale",
-    enemies: createStandardEnemyPlan("cryofin-ray"),
+    enemies: createAuthoredEnemyPlan([
+      {
+        groups: [
+          { enemy: "cryofin-ray", formation: ENCOUNTER_FORMATIONS.cross5 },
+        ],
+        durationSeconds: 23,
+      },
+      {
+        groups: [
+          {
+            enemy: "tideglass-manta",
+            formation: ENCOUNTER_FORMATIONS.wedge5,
+            guaranteedDrop: "homing-missiles",
+          },
+        ],
+        durationSeconds: 24,
+      },
+      {
+        groups: [
+          {
+            enemy: "cryofin-ray",
+            formation: [
+              [-9, 4],
+              [-3, 7],
+              [3, 7],
+            ],
+          },
+          {
+            enemy: "tideglass-manta",
+            formation: [
+              [7, 4],
+              [10, 7],
+              [0, 3],
+            ],
+            phaseOffset: 0.8,
+          },
+        ],
+        durationSeconds: 25,
+      },
+      {
+        groups: [
+          {
+            enemy: "tideglass-manta",
+            formation: [
+              [-9, 3],
+              [-5, 7],
+              [0, 5],
+            ],
+          },
+          {
+            enemy: "cryofin-ray",
+            formation: [
+              [5, 7],
+              [9, 3],
+            ],
+            phaseOffset: 1.3,
+            guaranteedDrop: "shield",
+          },
+        ],
+        durationSeconds: 26,
+      },
+    ]),
     environment: {
       atmosphere: true,
       wispyClouds: true,
@@ -162,7 +449,72 @@ export const LEVELS: Record<LevelId, LevelDefinition> = {
   6: {
     id: 6,
     name: "Ironpine Basin",
-    enemies: createStandardEnemyPlan("ironbark-hornet"),
+    enemies: createAuthoredEnemyPlan([
+      {
+        groups: [
+          {
+            enemy: "ironbark-hornet",
+            formation: ENCOUNTER_FORMATIONS.cross5,
+          },
+        ],
+        durationSeconds: 23,
+      },
+      {
+        groups: [
+          {
+            enemy: "stormneedle-kite",
+            formation: [
+              [-9, 4],
+              [-4, 7],
+              [4, 7],
+            ],
+          },
+          {
+            enemy: "gloomjelly",
+            formation: [
+              [0, 4],
+              [8, 5],
+              [0, 9],
+            ],
+            phaseOffset: 0.9,
+            guaranteedDrop: "homing-missiles",
+          },
+        ],
+        durationSeconds: 25,
+      },
+      {
+        groups: [
+          {
+            enemy: "cinderback-bomber",
+            formation: [
+              [-8, 4],
+              [0, 7],
+              [8, 4],
+            ],
+          },
+          {
+            enemy: "cryofin-ray",
+            formation: [
+              [-4, 8],
+              [4, 8],
+              [0, 3],
+            ],
+            phaseOffset: 1.2,
+          },
+        ],
+        durationSeconds: 26,
+      },
+      {
+        groups: [
+          {
+            enemy: "ironbark-hornet",
+            formation: ENCOUNTER_FORMATIONS.swarm7,
+            guaranteedDrop: "overcharged-bolts",
+          },
+        ],
+        durationSeconds: 27,
+      },
+    ]),
     environment: {
       atmosphere: true,
       wispyClouds: true,

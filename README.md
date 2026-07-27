@@ -21,7 +21,8 @@ Open the local URL printed by Vite, normally <http://localhost:5173>.
 | ------------------- | ------- |
 | Move                | W A S D |
 | Barrel roll / dodge | Q / E   |
-| Fire                | Space   |
+| Primary fire        | Space   |
+| Lock/fire missiles  | F       |
 | Fly faster          | Shift   |
 | Brake               | Alt     |
 | Pause               | Escape  |

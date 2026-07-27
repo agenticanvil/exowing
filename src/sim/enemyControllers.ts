@@ -57,10 +57,9 @@ export function controlEnemy(
   dt: number,
 ): EnemyControl {
   const controller = enemy.controller ?? "standard";
-  const definition = ENEMIES[enemy.enemyId];
   const state = (enemy.controllerState ??= {
     decisionCooldown: (enemy.id % 7) * 0.04,
-    fireCooldown: definition.shot.interval * (0.55 + (enemy.id % 5) * 0.12),
+    dodgeCooldown: 0,
     desiredX: 0,
     desiredY: 0,
     desiredDepthSpeed: 0,
@@ -77,7 +76,6 @@ function controlBoss(
   const distanceAhead = enemy.railDistance - context.playerRailDistance;
   const close = distanceAhead < BOSS_CLOSE_DISTANCE;
   state.decisionCooldown -= dt;
-  state.fireCooldown -= dt;
   if (state.decisionCooldown <= 0) {
     const decisionSeed = enemy.id * 0.73 + context.elapsed * 3.17;
     state.decisionCooldown = close
@@ -89,8 +87,6 @@ function controlBoss(
       ? 14 + (signedNoise(decisionSeed + 47.1) + 1) * 7
       : signedNoise(decisionSeed + 47.1) * 4.5;
   }
-  const fire = state.fireCooldown <= 0;
-  if (fire) state.fireCooldown = ENEMIES[enemy.enemyId].shot.interval;
   const edgeX =
     enemy.offsetX < -MAX_X + 3 ? 7 : enemy.offsetX > MAX_X - 3 ? -7 : 0;
   const edgeY =
@@ -107,7 +103,7 @@ function controlBoss(
       BOSS_MAX_VERTICAL_SPEED,
     ),
     depthSpeed: state.desiredDepthSpeed,
-    fire,
+    fire: false,
   };
 }
 
@@ -123,7 +119,7 @@ function controlStandardEnemy(
     throw new Error(`${definition.label} has no standard movement profile.`);
   const intensity = enemy.waveIndex === 1 ? REINFORCEMENT_INTENSITY : 1;
   state.decisionCooldown -= dt;
-  state.fireCooldown -= dt;
+  state.dodgeCooldown = Math.max(0, (state.dodgeCooldown ?? 0) - dt);
   if (state.decisionCooldown <= 0) {
     state.decisionCooldown =
       (movement.decisionInterval * (0.9 + (enemy.id % 4) * 0.07)) / intensity;
@@ -131,24 +127,28 @@ function controlStandardEnemy(
     let avoidX = 0;
     let avoidY = 0;
 
-    for (const shot of context.playerShots) {
-      const relative = subtract(enemy.position, shot.position);
-      const speedSquared = dot(shot.velocity, shot.velocity);
-      const time =
-        speedSquared > 0 ? dot(relative, shot.velocity) / speedSquared : -1;
-      if (time <= 0 || time > 0.7) continue;
-      const closest = subtract(relative, scale(shot.velocity, time));
-      const lateral = dot(closest, rail.right);
-      const vertical = closest.y;
-      if (lateral * lateral + vertical * vertical < 12) {
-        const bias =
-          ((enemy.id + Math.floor(context.elapsed * 2)) & 1) === 0 ? -1 : 1;
-        avoidX +=
-          (Math.abs(lateral) > 0.15 ? Math.sign(lateral) * 4 : bias * 4) *
-          movement.dodgeStrength;
-        avoidY +=
-          (Math.abs(vertical) > 0.15 ? Math.sign(vertical) * 2.5 : bias * 2) *
-          movement.dodgeStrength;
+    if (state.dodgeCooldown === 0 && movement.role !== "artillery") {
+      for (const shot of context.playerShots) {
+        const relative = subtract(enemy.position, shot.position);
+        const speedSquared = dot(shot.velocity, shot.velocity);
+        const time =
+          speedSquared > 0 ? dot(relative, shot.velocity) / speedSquared : -1;
+        if (time <= 0 || time > 0.7) continue;
+        const closest = subtract(relative, scale(shot.velocity, time));
+        const lateral = dot(closest, rail.right);
+        const vertical = closest.y;
+        if (lateral * lateral + vertical * vertical < 12) {
+          const bias =
+            ((enemy.id + Math.floor(context.elapsed * 2)) & 1) === 0 ? -1 : 1;
+          avoidX +=
+            (Math.abs(lateral) > 0.15 ? Math.sign(lateral) * 4 : bias * 4) *
+            movement.dodgeStrength;
+          avoidY +=
+            (Math.abs(vertical) > 0.15 ? Math.sign(vertical) * 2.5 : bias * 2) *
+            movement.dodgeStrength;
+          state.dodgeCooldown = 1.5 + (enemy.id % 5) * 0.22;
+          break;
+        }
       }
     }
 
@@ -173,29 +173,15 @@ function controlStandardEnemy(
       }
     }
 
-    state.desiredX =
-      avoidX +
-      Math.sin(context.elapsed * movement.horizontalFrequency + enemy.phase) *
-        movement.horizontalAmplitude *
-        intensity;
-    state.desiredY =
-      avoidY +
-      Math.cos(context.elapsed * movement.verticalFrequency + enemy.phase) *
-        movement.verticalAmplitude *
-        intensity;
+    const roleMovement = movementForRole(enemy, context, movement.role);
+    state.desiredX = avoidX + roleMovement.x * intensity;
+    state.desiredY = avoidY + roleMovement.y * intensity;
     state.desiredDepthSpeed =
       Math.sin(context.elapsed * movement.depthFrequency + enemy.phase * 1.7) *
       movement.depthAmplitude *
       intensity;
   }
 
-  const fire =
-    state.fireCooldown <= 0 &&
-    distanceSquared(enemy.position, context.playerPosition) <
-      definition.shot.range ** 2;
-  if (fire)
-    state.fireCooldown =
-      (definition.shot.interval * (0.9 + (enemy.id % 5) * 0.06)) / intensity;
   const edgeX =
     enemy.offsetX < -MAX_X + 2 ? 5 : enemy.offsetX > MAX_X - 2 ? -5 : 0;
   const edgeY =
@@ -212,8 +198,84 @@ function controlStandardEnemy(
       movement.maxVerticalSpeed * intensity,
     ),
     depthSpeed: state.desiredDepthSpeed,
-    fire,
+    fire: false,
   };
+}
+
+function movementForRole(
+  enemy: EnemyState,
+  context: EnemyControlContext,
+  role: NonNullable<
+    (typeof ENEMIES)[EnemyState["enemyId"]]["movement"]
+  >["role"],
+) {
+  const movement = ENEMIES[enemy.enemyId].movement!;
+  const phase = context.elapsed + enemy.phase;
+  switch (role) {
+    case "strafe": {
+      const sweep = Math.sin(phase * movement.horizontalFrequency);
+      return {
+        x:
+          Math.sign(sweep || 1) *
+          Math.abs(sweep) ** 0.65 *
+          movement.horizontalAmplitude,
+        y:
+          Math.cos(phase * movement.verticalFrequency) *
+          movement.verticalAmplitude,
+      };
+    }
+    case "dive": {
+      const cycle = (((phase * 0.38) % 1) + 1) % 1;
+      const attacking = cycle < 0.42;
+      const targetX = attacking
+        ? context.playerPosition.x - enemy.position.x
+        : (enemy.id % 2 === 0 ? -1 : 1) * movement.horizontalAmplitude;
+      const targetY = attacking
+        ? context.playerPosition.y - enemy.position.y
+        : movement.verticalAmplitude;
+      return {
+        x: clamp(
+          targetX * 1.35,
+          -movement.maxHorizontalSpeed,
+          movement.maxHorizontalSpeed,
+        ),
+        y: clamp(
+          targetY * 1.15,
+          -movement.maxVerticalSpeed,
+          movement.maxVerticalSpeed,
+        ),
+      };
+    }
+    case "artillery": {
+      const anchorX =
+        ((enemy.id % 3) - 1) * Math.max(4, movement.horizontalAmplitude * 2);
+      const anchorY = 4 + (enemy.id % 2) * 3;
+      return {
+        x: clamp(
+          (anchorX - enemy.offsetX) * 0.8,
+          -movement.maxHorizontalSpeed,
+          movement.maxHorizontalSpeed,
+        ),
+        y: clamp(
+          (anchorY - enemy.offsetY) * 0.65,
+          -movement.maxVerticalSpeed,
+          movement.maxVerticalSpeed,
+        ),
+      };
+    }
+    case "formation": {
+      const direction = enemy.waveIndex % 2 === 0 ? 1 : -1;
+      return {
+        x:
+          direction *
+          Math.cos(phase * movement.horizontalFrequency) *
+          movement.horizontalAmplitude,
+        y:
+          Math.sin(phase * movement.verticalFrequency * 0.6) *
+          movement.verticalAmplitude,
+      };
+    }
+  }
 }
 
 function subtract(a: Vec3, b: Vec3): Vec3 {
@@ -224,10 +286,6 @@ function scale(a: Vec3, amount: number): Vec3 {
 }
 function dot(a: Vec3, b: Vec3) {
   return a.x * b.x + a.y * b.y + a.z * b.z;
-}
-function distanceSquared(a: Vec3, b: Vec3) {
-  const d = subtract(a, b);
-  return dot(d, d);
 }
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
