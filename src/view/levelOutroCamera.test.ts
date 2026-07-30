@@ -15,6 +15,7 @@ describe("levelOutroPose", () => {
       right,
       24,
       -0.18,
+      0.3,
       0,
       0,
       3.8,
@@ -24,6 +25,7 @@ describe("levelOutroPose", () => {
     expect(pose.cameraTarget).toEqual(railCenter);
     expect(pose.shipPosition).toEqual(shipPosition);
     expect(pose.shipPitch).toBe(-0.18);
+    expect(pose.shipRoll).toBe(0.3);
   });
 
   it("flies straight for half a second before beginning the ascent", () => {
@@ -34,6 +36,7 @@ describe("levelOutroPose", () => {
       right,
       24,
       -0.18,
+      0.3,
       0.1,
       0.4,
       3.8,
@@ -45,6 +48,7 @@ describe("levelOutroPose", () => {
       right,
       24,
       -0.18,
+      0.3,
       0.13,
       0.5,
       3.8,
@@ -52,8 +56,11 @@ describe("levelOutroPose", () => {
 
     expect(coasting.shipPosition).toEqual(shipPosition);
     expect(coasting.shipPitch).toBeGreaterThan(-0.18);
+    expect(coasting.shipRoll).toBeLessThan(0.3);
+    expect(coasting.shipRoll).toBeGreaterThan(0);
     expect(ascentStart.shipPosition).toEqual(shipPosition);
     expect(ascentStart.shipPitch).toBe(0);
+    expect(ascentStart.shipRoll).toBe(0);
   });
 
   it("matches the ship pitch to the tangent of the curved ascent", () => {
@@ -64,6 +71,7 @@ describe("levelOutroPose", () => {
         forward,
         right,
         24,
+        0,
         0,
         elapsedSeconds / 3.8,
         elapsedSeconds,
@@ -92,6 +100,7 @@ describe("levelOutroPose", () => {
       forward,
       right,
       24,
+      0,
       0,
       1,
       3.8,

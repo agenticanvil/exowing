@@ -22,6 +22,7 @@ export function levelOutroPose(
   right: Vec3,
   defaultCameraDistance: number,
   initialShipPitch: number,
+  initialShipRoll: number,
   progress: number,
   elapsedSeconds: number,
   durationSeconds: number,
@@ -97,7 +98,7 @@ export function levelOutroPose(
       elapsedSeconds < STRAIGHT_FLIGHT_SECONDS
         ? lerp(initialShipPitch, 0, straightProgress)
         : ascentPitch,
-    shipRoll: climbProgress * 0.08,
+    shipRoll: lerp(initialShipRoll, 0, straightProgress),
   };
 }
 

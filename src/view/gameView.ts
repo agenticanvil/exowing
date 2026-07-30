@@ -266,6 +266,11 @@ export class GameView {
       sim.player.offsetY,
       sim.player.velocityY,
     );
+    const turnBank = splineTurnStrength(sim.railDistance) * TURN_BANK;
+    const inputBank = (sim.player.velocityX / 12) * INPUT_BANK;
+    const barrelRoll =
+      sim.player.rollDirection * sim.player.rollProgress * Math.PI * 2;
+    const gameplayShipRoll = normalizeAngle(turnBank + inputBank + barrelRoll);
     const outroPose =
       sequence?.kind === "outro"
         ? levelOutroPose(
@@ -275,6 +280,7 @@ export class GameView {
             rail.right,
             cameraDistance,
             gameplayShipPitch,
+            gameplayShipRoll,
             sequence.progress,
             sequence.elapsedSeconds,
             sequence.durationSeconds,
@@ -287,12 +293,7 @@ export class GameView {
       renderedShipPosition.z,
     );
     this.ship.rotation.y = -rail.heading;
-    const turnBank = splineTurnStrength(sim.railDistance) * TURN_BANK;
-    const inputBank = (sim.player.velocityX / 12) * INPUT_BANK;
-    const barrelRoll =
-      sim.player.rollDirection * sim.player.rollProgress * Math.PI * 2;
-    this.ship.rotation.z =
-      turnBank + inputBank + barrelRoll + (outroPose?.shipRoll ?? 0);
+    this.ship.rotation.z = outroPose?.shipRoll ?? gameplayShipRoll;
     this.ship.rotation.x = outroPose?.shipPitch ?? gameplayShipPitch;
     this.ship.updateMatrixWorld(true);
     const overshieldHit =
@@ -973,6 +974,10 @@ function splineTurnStrength(distance: number) {
     Math.cos(after.heading - before.heading),
   );
   return THREE.MathUtils.clamp(headingDelta / FULL_TURN_HEADING_DELTA, -1, 1);
+}
+
+function normalizeAngle(angle: number) {
+  return Math.atan2(Math.sin(angle), Math.cos(angle));
 }
 
 const enemyMatrix = new THREE.Matrix4();
