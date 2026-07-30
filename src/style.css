@@ -1680,10 +1680,12 @@ canvas {
 .hud__pickup {
   position: absolute;
   left: 10px;
-  display: flex;
-  align-items: baseline;
+  display: grid;
+  grid-template-columns: 56px 34px minmax(0, 1fr);
+  align-items: center;
   gap: 10px;
-  min-width: 236px;
+  width: 330px;
+  height: 39px;
   padding: 7px 18px;
   color: #9fffee;
   font-size: 9px;
@@ -1697,7 +1699,6 @@ canvas {
 
 .hud__pickup {
   top: 112px;
-  min-width: 330px;
 }
 
 .hud__ordnance strong,
@@ -1712,9 +1713,10 @@ canvas {
 
 .hud__ordnance span:last-child,
 .hud__pickup span:last-child {
-  margin-left: auto;
+  justify-self: end;
   color: rgb(255 255 255 / 66%);
   font-size: 8px;
+  white-space: nowrap;
 }
 
 .hud__shield {
