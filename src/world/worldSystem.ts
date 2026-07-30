@@ -23,6 +23,7 @@ export type LevelEnvironment = {
   hemisphereSky: number;
   hemisphereGround: number;
   hemisphereIntensity: number;
+  enemyFillIntensity?: number;
   skySunIntensity: number;
   exposure: number;
 };

@@ -44,6 +44,9 @@ const ENEMY_SHOT_COLOR = 0xff3b32;
 const RETICLE_COLOR = 0x3df8ff;
 const RETICLE_NEAR_DISTANCE = 18;
 const RETICLE_FAR_DISTANCE = 46;
+const OVERSHIELD_COLOR = new THREE.Color(0x49eaff).multiplyScalar(2.4);
+const OVERSHIELD_HIT_COLOR = new THREE.Color(0xff241c).multiplyScalar(3);
+const OVERSHIELD_HIT_FLASH_DURATION = 0.24;
 type EnemyInstanceView = {
   mesh: THREE.InstancedMesh;
   hit: THREE.InstancedBufferAttribute;
@@ -73,7 +76,8 @@ export class GameView {
   private readonly softParticleUniforms = createSoftParticleUniforms();
   private readonly fxaaPass = new FXAAPass();
   private readonly ship = new THREE.Group();
-  private readonly overshieldShell = createOvershieldShell();
+  private overshieldShell: ReturnType<typeof createOvershieldShell>;
+  private overshieldHitFlashUntil = 0;
   private readonly playerModels = new Map<PlayerModelId, THREE.Group>();
   private jetExhaust: JetExhaustView;
   private wingtipVortices?: WingtipVortexView;
@@ -174,7 +178,8 @@ export class GameView {
     const initialPlayer = this.playerModels.get(this.activePlayerModelId);
     if (!initialPlayer)
       throw new Error("The default player model is unavailable.");
-    this.ship.add(initialPlayer, this.overshieldShell);
+    this.overshieldShell = createOvershieldShell(initialPlayer);
+    this.ship.add(initialPlayer, this.overshieldShell.group);
     this.jetExhaust = new JetExhaustView(initialPlayer);
     this.scene.add(this.ship);
     const destructionSources = new Map<
@@ -191,7 +196,11 @@ export class GameView {
       if (Array.isArray(source.material))
         throw new Error(`${ENEMIES[enemyId].label} must use one material.`);
       const destructionMaterial = source.material.clone();
-      addInstancedHitFlash(source.material, enemyId);
+      addInstancedHitFlash(
+        source.material,
+        enemyId,
+        environment.enemyFillIntensity ?? 0,
+      );
       source.geometry.computeBoundingSphere();
       const baseRadius = source.geometry.boundingSphere?.radius ?? 1;
       const hit = new THREE.InstancedBufferAttribute(new Float32Array(256), 1);
@@ -286,12 +295,21 @@ export class GameView {
       turnBank + inputBank + barrelRoll + (outroPose?.shipRoll ?? 0);
     this.ship.rotation.x = outroPose?.shipPitch ?? gameplayShipPitch;
     this.ship.updateMatrixWorld(true);
-    const overshieldMaterial = this.overshieldShell
-      .material as THREE.MeshBasicMaterial;
-    this.overshieldShell.visible = sim.player.overshield > 0;
-    overshieldMaterial.opacity =
-      (0.14 + Math.sin(renderTime * 5) * 0.035) *
-      Math.min(1, sim.player.overshield / 3);
+    const overshieldHit =
+      THREE.MathUtils.clamp(
+        (this.overshieldHitFlashUntil - renderTime) /
+          OVERSHIELD_HIT_FLASH_DURATION,
+        0,
+        1,
+      ) ** 0.55;
+    this.overshieldShell.group.visible =
+      sim.player.overshield > 0 || overshieldHit > 0;
+    this.overshieldShell.material.color
+      .copy(OVERSHIELD_COLOR)
+      .lerp(OVERSHIELD_HIT_COLOR, overshieldHit);
+    this.overshieldShell.material.opacity =
+      (0.42 + Math.sin(renderTime * 6) * 0.06) *
+      Math.max(Math.min(1, sim.player.overshield / 3), overshieldHit);
     this.wingtipVortices?.update(sim.railSpeed, renderDt);
     for (const [enemyId, enemyView] of this.enemyViews)
       syncEnemyInstances(
@@ -408,6 +426,11 @@ export class GameView {
     this.reticle.group.visible = visible;
   }
 
+  flashOvershieldHit() {
+    this.overshieldHitFlashUntil =
+      performance.now() * 0.001 + OVERSHIELD_HIT_FLASH_DURATION;
+  }
+
   setPlayerModel(modelId: PlayerModelId) {
     if (modelId === this.activePlayerModelId) return;
     const model = this.playerModels.get(modelId);
@@ -416,7 +439,9 @@ export class GameView {
     this.jetExhaust.dispose();
     this.wingtipVortices?.dispose();
     this.ship.clear();
-    this.ship.add(model, this.overshieldShell);
+    disposeObject(this.overshieldShell.group);
+    this.overshieldShell = createOvershieldShell(model);
+    this.ship.add(model, this.overshieldShell.group);
     this.jetExhaust = new JetExhaustView(model);
     this.wingtipVortices = this.hasAtmosphere
       ? new WingtipVortexView(this.scene, model)
@@ -450,7 +475,7 @@ export class GameView {
     this.jetExhaust.dispose();
     this.wingtipVortices?.dispose();
     this.enemyDestructions.dispose();
-    disposeObject(this.overshieldShell);
+    disposeObject(this.overshieldShell.group);
     for (const model of this.playerModels.values()) disposeObject(model);
     this.ship.removeFromParent();
     for (const group of this.projectileViews.values())
@@ -692,25 +717,30 @@ function createPlaceholderEnemy() {
   );
 }
 
-function createOvershieldShell() {
+function createOvershieldShell(playerModel: THREE.Group) {
   const material = new THREE.MeshBasicMaterial({
-    color: new THREE.Color(0x49eaff).multiplyScalar(2.1),
+    color: OVERSHIELD_COLOR,
+    wireframe: true,
     transparent: true,
-    opacity: 0.16,
+    opacity: 0.46,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
-    side: THREE.BackSide,
     toneMapped: false,
   });
-  const shell = new THREE.Mesh(
-    new THREE.SphereGeometry(5.25, 32, 18),
-    material,
-  );
-  shell.scale.set(1.12, 0.45, 0.78);
-  shell.position.y = 0.3;
-  shell.visible = false;
-  shell.renderOrder = 3;
-  return shell;
+  const group = playerModel.clone(true);
+  group.name = "overshield-wireframe";
+  group.scale.setScalar(1.33);
+  group.visible = false;
+  group.renderOrder = 3;
+  group.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return;
+    object.geometry = object.geometry.clone();
+    object.material = material;
+    object.castShadow = false;
+    object.receiveShadow = false;
+    object.renderOrder = 3;
+  });
+  return { group, material };
 }
 
 function createPlaceholderPickup(pickupId: keyof typeof PICKUPS) {
@@ -986,8 +1016,13 @@ function syncEnemyInstances(
   mesh.computeBoundingSphere();
 }
 
-function addInstancedHitFlash(material: THREE.Material, asset: EnemyId) {
+function addInstancedHitFlash(
+  material: THREE.Material,
+  asset: EnemyId,
+  enemyFillIntensity: number,
+) {
   material.onBeforeCompile = (shader) => {
+    shader.uniforms.enemyFillIntensity = { value: enemyFillIntensity };
     shader.vertexShader = shader.vertexShader
       .replace(
         "#include <common>",
@@ -1000,14 +1035,15 @@ function addInstancedHitFlash(material: THREE.Material, asset: EnemyId) {
     shader.fragmentShader = shader.fragmentShader
       .replace(
         "#include <common>",
-        "#include <common>\nvarying float vInstanceHit;\nvarying float vInstanceAttack;",
+        "#include <common>\nuniform float enemyFillIntensity;\nvarying float vInstanceHit;\nvarying float vInstanceAttack;",
       )
       .replace(
         "#include <opaque_fragment>",
-        "outgoingLight = mix(outgoingLight, vec3(3.4, 0.35, 0.08), vInstanceAttack * 0.82);\noutgoingLight = mix(outgoingLight, vec3(5.0), vInstanceHit);\n#include <opaque_fragment>",
+        "vec3 enemyFillDirection = normalize(vec3(-0.28, 0.42, 0.86));\nfloat enemyFill = smoothstep(-0.28, 0.72, dot(normal, enemyFillDirection));\noutgoingLight += diffuseColor.rgb * vec3(0.78, 0.9, 1.0) * enemyFill * enemyFillIntensity;\noutgoingLight = mix(outgoingLight, vec3(3.4, 0.35, 0.08), vInstanceAttack * 0.82);\noutgoingLight = mix(outgoingLight, vec3(5.0), vInstanceHit);\n#include <opaque_fragment>",
       );
   };
-  material.customProgramCacheKey = () => `${asset}-instanced-hit-v1`;
+  material.customProgramCacheKey = () =>
+    `${asset}-instanced-hit-v2-${enemyFillIntensity}`;
 }
 
 function addFlightWindow(scene: THREE.Scene) {

@@ -604,6 +604,7 @@ function updateFrame(now: number) {
     while (lifecycle.mode === "playing" && accumulator >= fixedDt) {
       simulation.invulnerable =
         runMode === "transition-tour" || devSettings.invulnerable;
+      const overshieldBeforeStep = simulation.player.overshield;
       const protectionBeforeStep =
         simulation.player.shield + simulation.player.overshield;
       const result = simulation.step(input.command(), fixedDt);
@@ -618,7 +619,10 @@ function updateFrame(now: number) {
             simulation.player.overshield,
         ),
       );
-      if (result.playerHits > 0) flashDamageVignette();
+      if (result.playerHits > 0) {
+        flashDamageVignette();
+        if (overshieldBeforeStep > 0) view.flashOvershieldHit();
+      }
       if (result.levelComplete) beginLevelOutro();
       else if (simulation.player.shield <= 0) showGameOver();
       accumulator -= fixedDt;

@@ -59,6 +59,16 @@ describe("level definitions", () => {
     expect(LEVELS[4].environment.wispyClouds).toBe(false);
   });
 
+  it("adds restrained enemy fill only to the darker levels", () => {
+    expect(LEVELS[2].environment.enemyFillIntensity).toBe(0.55);
+    expect(LEVELS[4].environment.enemyFillIntensity).toBe(0.38);
+    expect(
+      [LEVELS[1], LEVELS[3], LEVELS[5], LEVELS[6]].every(
+        (level) => level.environment.enemyFillIntensity === undefined,
+      ),
+    ).toBe(true);
+  });
+
   it("defines the alpine snowfields as a dedicated terrestrial system", () => {
     const systems = LEVELS[5].systems.map((definition) => definition.create());
 
