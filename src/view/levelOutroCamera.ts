@@ -3,7 +3,6 @@ import { DEFAULT_GAMEPLAY_CAMERA_FOV } from "./levelIntroCamera";
 
 const SHIP_CLIMB_DISTANCE = 58;
 const SHIP_FORWARD_DISTANCE = 34;
-const SHIP_DRIFT_DISTANCE = 1.5;
 const STRAIGHT_FLIGHT_SECONDS = 0.5;
 
 export type LevelOutroPose = {
@@ -19,10 +18,8 @@ export function levelOutroPose(
   railCenter: Vec3,
   shipPosition: Vec3,
   forward: Vec3,
-  right: Vec3,
   defaultCameraDistance: number,
   initialShipPitch: number,
-  initialShipRoll: number,
   progress: number,
   elapsedSeconds: number,
   durationSeconds: number,
@@ -79,26 +76,19 @@ export function levelOutroPose(
       ? 0
       : -Math.atan2(
           2 * SHIP_CLIMB_DISTANCE * ascentProgress,
-          Math.hypot(
-            SHIP_FORWARD_DISTANCE,
-            2 * SHIP_DRIFT_DISTANCE * ascentProgress,
-          ),
+          SHIP_FORWARD_DISTANCE,
         );
 
   return {
     cameraPosition,
     cameraTarget,
     cameraFov: lerp(DEFAULT_GAMEPLAY_CAMERA_FOV, 58, cameraProgress),
-    shipPosition: addScaled(
-      liftedShip,
-      right,
-      climbProgress * SHIP_DRIFT_DISTANCE,
-    ),
+    shipPosition: liftedShip,
     shipPitch:
       elapsedSeconds < STRAIGHT_FLIGHT_SECONDS
         ? lerp(initialShipPitch, 0, straightProgress)
         : ascentPitch,
-    shipRoll: lerp(initialShipRoll, 0, straightProgress),
+    shipRoll: 0,
   };
 }
 
