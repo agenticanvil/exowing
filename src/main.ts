@@ -11,6 +11,10 @@ import { GameLifecycle } from "./game/gameLifecycle";
 import { performanceRecorder } from "./performance";
 import { createAudioSystem, DEFAULT_AUDIO_SETTINGS } from "./audio";
 import { FlightAudioFeedback } from "./game/flightAudioFeedback";
+import {
+  ControlHintGuide,
+  type ControlHintVisibility,
+} from "./game/controlHints";
 import { installMenuKeyboard } from "./input/menuKeyboard";
 import { FlightEventBus } from "./game/flightEvents";
 import {
@@ -145,6 +149,12 @@ const bossHealthValue = requiredElement<HTMLSpanElement>("#boss-health-value");
 const bossHealthFill = requiredElement<HTMLDivElement>("#boss-health-fill");
 const fps = requiredElement<HTMLDivElement>("#fps");
 const hud = requiredElement<HTMLDivElement>("#hud");
+const controlHints = requiredElement<HTMLElement>("#control-hints");
+const controlHintElements: Record<keyof ControlHintVisibility, HTMLElement> = {
+  movement: requiredElement('[data-control-hint="movement"]'),
+  fire: requiredElement('[data-control-hint="fire"]'),
+  dodge: requiredElement('[data-control-hint="dodge"]'),
+};
 const mainMenu = requiredElement<HTMLDivElement>("#main-menu");
 const pauseMenu = requiredElement<HTMLDivElement>("#pause-menu");
 const controlsMenu = requiredElement<HTMLDivElement>("#controls-menu");
@@ -186,6 +196,7 @@ type RunMode = "standard" | "boss" | "transition-tour";
 let runMode: RunMode = "standard";
 let activeEnemyPlan: LevelEnemyPlan = LEVELS[1].enemies;
 const lifecycle = new GameLifecycle();
+const controlHintGuide = new ControlHintGuide();
 let closeDevOverlay: (() => void) | null = null;
 type DevSettingName =
   | "invulnerable"
@@ -305,6 +316,8 @@ function styleForLevel(levelNumber: number): LevelId {
 function startRun(levelNumber: LevelId, mode: RunMode = "standard") {
   runMode = mode;
   activeUpgrades = [];
+  controlHintGuide.reset();
+  renderControlHints();
   void startGame(levelNumber);
 }
 
@@ -378,6 +391,7 @@ async function startGame(levelNumber = 1, carry?: CampaignCarry) {
 function pauseGame() {
   if (!lifecycle.pause()) return;
   input.setEnabled(false);
+  renderControlHints(false);
   showMenu(pauseMenu);
   continueButton.focus();
 }
@@ -387,6 +401,7 @@ function continueGame() {
   input.setEnabled(true);
   hideMenu(pauseMenu);
   accumulator = 0;
+  renderControlHints();
 }
 
 function returnToMainMenu() {
@@ -397,6 +412,8 @@ function returnToMainMenu() {
   document.querySelectorAll<HTMLElement>(".menu").forEach(hideMenuImmediately);
   showMenu(mainMenu);
   hud.hidden = true;
+  controlHintGuide.stop();
+  renderControlHints();
   startButton.focus();
 }
 
@@ -594,7 +611,13 @@ function updateFrame(now: number) {
       const overshieldBeforeStep = simulation.player.overshield;
       const protectionBeforeStep =
         simulation.player.shield + simulation.player.overshield;
-      const result = simulation.step(input.command(), fixedDt);
+      const command = input.command();
+      const result = simulation.step(command, fixedDt);
+      const hostileFireRelevant =
+        simulation.enemies.some((enemy) => (enemy.attackTelegraph ?? 0) > 0) ||
+        simulation.projectiles.some((shot) => shot.owner === "enemy");
+      controlHintGuide.update(command, hostileFireRelevant, fixedDt);
+      renderControlHints();
       recordLevelStep(
         levelStats,
         result,
@@ -693,10 +716,29 @@ function flashDamageVignette() {
   damageVignette.classList.add("damage-vignette--active");
 }
 
+function renderControlHints(show = lifecycle.mode === "playing") {
+  const visibility = controlHintGuide.visibility();
+  let anyVisible = false;
+  for (const name of Object.keys(visibility) as Array<
+    keyof ControlHintVisibility
+  >) {
+    const visible = show && visibility[name];
+    controlHintElements[name].classList.toggle(
+      "hud__control-hint--visible",
+      visible,
+    );
+    anyVisible ||= visible;
+  }
+  controlHints.classList.toggle("hud__control-hints--visible", anyVisible);
+  controlHints.setAttribute("aria-hidden", (!anyVisible).toString());
+}
+
 function showGameOver() {
   if (!lifecycle.gameOver()) return;
   input.setEnabled(false);
   hud.hidden = true;
+  controlHintGuide.stop();
+  renderControlHints();
   showMenu(gameOverMenu);
   retryButton.focus();
 }
@@ -730,6 +772,8 @@ function updateLevelIntro(now: number): number | undefined {
     return 1;
   }
   hud.hidden = false;
+  controlHintGuide.start();
+  renderControlHints();
   view.setReticleVisible(targetingReticleInput.checked);
   return 1;
 }
@@ -744,6 +788,8 @@ function beginLevelOutro() {
   if (!lifecycle.beginOutro()) return;
   input.setEnabled(false);
   hud.hidden = true;
+  controlHintGuide.stop();
+  renderControlHints();
   bossHealth.hidden = true;
   view.setReticleVisible(false);
   levelOutroStartedAt = performance.now();

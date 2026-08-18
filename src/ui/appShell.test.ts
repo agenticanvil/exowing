@@ -110,6 +110,17 @@ describe("mountAppShell", () => {
     expect(app.innerHTML).toContain("ACTIVATE PICKUP");
   });
 
+  it("includes progressive keyboard control hints in the HUD", () => {
+    const app = { innerHTML: "" } as HTMLElement;
+
+    mountAppShell(app, false);
+
+    expect(app.innerHTML).toContain('id="control-hints"');
+    expect(app.innerHTML).toContain('data-control-hint="movement"');
+    expect(app.innerHTML).toContain('data-control-hint="fire"');
+    expect(app.innerHTML).toContain('data-control-hint="dodge"');
+  });
+
   it("keeps the between-level cover free of a level-number card", () => {
     const app = { innerHTML: "" } as HTMLElement;
 
