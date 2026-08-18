@@ -5,17 +5,12 @@ import { ENEMIES, type LevelEnemyPlan } from "./enemies";
 import { createWorld } from "./world/worldSystem";
 import { FlightSimulation } from "./sim/flightSimulation";
 import { GameView } from "./view/gameView";
-import {
-  loadGameAssets,
-  type AssetLoadProgress,
-  type PlayerModelId,
-} from "./assets/gameAssets";
+import { loadGameAssets, type AssetLoadProgress } from "./assets/gameAssets";
 import { mountAppShell, requiredElement } from "./ui/appShell";
 import { GameLifecycle } from "./game/gameLifecycle";
 import { performanceRecorder } from "./performance";
 import { createAudioSystem, DEFAULT_AUDIO_SETTINGS } from "./audio";
 import { FlightAudioFeedback } from "./game/flightAudioFeedback";
-import { playerModelForHotkey } from "./input/playerModelHotkeys";
 import { installMenuKeyboard } from "./input/menuKeyboard";
 import { FlightEventBus } from "./game/flightEvents";
 import {
@@ -67,7 +62,6 @@ window.addEventListener("pointerdown", unlockAudio, { once: true });
 window.addEventListener("keydown", unlockAudio, { once: true });
 let currentLevelNumber = 1;
 let view = new GameView(appRoot, LEVELS[1], initialWorld);
-let selectedPlayerModel: PlayerModelId = "plane-1";
 const score = document.querySelector<HTMLSpanElement>("#score");
 const shield = requiredElement<HTMLSpanElement>("#shield");
 const shieldFill = requiredElement<HTMLDivElement>("#shield-fill");
@@ -350,7 +344,6 @@ async function startGame(levelNumber = 1, carry?: CampaignCarry) {
     });
     levelStats = createLevelStats(simulation.score);
     view = new GameView(appRoot, level, world, assets);
-    view.setPlayerModel(selectedPlayerModel);
     view.setRenderScale(Number(renderScaleSelect.value));
     view.setAntiAliasing(antiAliasingInput.checked);
     view.setReticleVisible(targetingReticleInput.checked);
@@ -469,12 +462,6 @@ window.addEventListener("keydown", (event) => {
   ) {
     event.preventDefault();
     continueAfterLevelResults();
-    return;
-  }
-  const playerModel = playerModelForHotkey(event.code);
-  if (playerModel && lifecycle.mode === "playing") {
-    selectedPlayerModel = playerModel;
-    view.setPlayerModel(playerModel);
     return;
   }
   if (event.code !== "Escape") return;

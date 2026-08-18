@@ -6,13 +6,10 @@ import { LEVELS, type LevelId } from '../levels';
 import { PICKUPS, PICKUP_IDS, type PickupId } from '../pickups';
 
 export type GameAssets = {
-  createPlayer: (modelId?: PlayerModelId) => THREE.Group;
+  createPlayer: () => THREE.Group;
   createEnemy: (enemyId: EnemyId) => THREE.Mesh;
   createPickup: (pickupId: PickupId) => THREE.Group;
 };
-
-export const PLAYER_MODEL_IDS = ['plane-1', 'plane-3'] as const;
-export type PlayerModelId = (typeof PLAYER_MODEL_IDS)[number];
 
 export const PLAYER_EFFECT_SOCKETS = [
   { name: 'socketexhaustleft', position: [-1.18, 0.47, 2.56] },
@@ -52,19 +49,11 @@ type LoadedModel = {
   transform: AssetTransform;
 };
 
-const playerPlanes: Record<PlayerModelId, ModelAsset> = {
-  'plane-1': {
-    key: 'player/plane-1',
-    label: 'Player aircraft 1',
-    modelUrl: new URL('../../assets/player/plane-1/plane-1.glb', import.meta.url).href,
-    sidecarUrl: new URL('../../assets/player/plane-1/plane-1.asset.json', import.meta.url).href,
-  },
-  'plane-3': {
-    key: 'player/plane-3',
-    label: 'Player aircraft 3',
-    modelUrl: new URL('../../assets/player/plane-3/plane-3.glb', import.meta.url).href,
-    sidecarUrl: new URL('../../assets/player/plane-3/plane-3.asset.json', import.meta.url).href,
-  },
+const playerPlane: ModelAsset = {
+  key: 'player/plane-3',
+  label: 'Player aircraft',
+  modelUrl: new URL('../../assets/player/plane-3/plane-3.glb', import.meta.url).href,
+  sidecarUrl: new URL('../../assets/player/plane-3/plane-3.asset.json', import.meta.url).href,
 };
 
 // Keep level-only models here. The loader already treats each level as its own
@@ -86,7 +75,7 @@ export async function loadGameAssets(
   levelId: LevelId,
   onProgress?: (progress: AssetLoadProgress) => void,
 ): Promise<GameAssets> {
-  const models = [...Object.values(playerPlanes), ...levelModels[levelId]];
+  const models = [playerPlane, ...levelModels[levelId]];
   const enemyIds = enemyIdsForPlan(LEVELS[levelId].enemies);
   const totalAssets = models.length + enemyIds.length + PICKUP_IDS.length;
   const loaded = new Map<string, LoadedModel>();
@@ -100,9 +89,8 @@ export async function loadGameAssets(
     onProgress?.({ loaded: index + 1, total: totalAssets });
   }
 
-  for (const modelId of PLAYER_MODEL_IDS)
-    if (!loaded.has(playerPlanes[modelId].key))
-      throw new Error(`Player aircraft ${modelId} did not load.`);
+  if (!loaded.has(playerPlane.key))
+    throw new Error('Player aircraft did not load.');
 
   for (let index = 0; index < enemyIds.length; index++) {
     const enemyId = enemyIds[index];
@@ -131,9 +119,9 @@ export async function loadGameAssets(
   }
 
   return {
-    createPlayer: (modelId = 'plane-1') => {
-      const player = loaded.get(playerPlanes[modelId].key);
-      if (!player) throw new Error(`Player aircraft ${modelId} is unavailable.`);
+    createPlayer: () => {
+      const player = loaded.get(playerPlane.key);
+      if (!player) throw new Error('Player aircraft is unavailable.');
       return createPlayerInstance(player);
     },
     createEnemy: (enemyId) => {

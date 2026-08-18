@@ -9,11 +9,7 @@ import { FLIGHT_WINDOW, type FlightSimulation } from "../sim/flightSimulation";
 import { railFrameAtDistance, railOffsetPosition } from "../sim/railSystem";
 import { SkyView } from "./skyView";
 import type { WorldRuntime } from "../world/worldSystem";
-import {
-  PLAYER_MODEL_IDS,
-  type GameAssets,
-  type PlayerModelId,
-} from "../assets/gameAssets";
+import type { GameAssets } from "../assets/gameAssets";
 import { JetExhaustView } from "./jetExhaustView";
 import { WingtipVortexView } from "./wingtipVortexView";
 import type { Vec3 } from "../sim/types";
@@ -76,12 +72,11 @@ export class GameView {
   private readonly softParticleUniforms = createSoftParticleUniforms();
   private readonly fxaaPass = new FXAAPass();
   private readonly ship = new THREE.Group();
+  private readonly playerModel: THREE.Group;
   private overshieldShell: ReturnType<typeof createOvershieldShell>;
   private overshieldHitFlashUntil = 0;
-  private readonly playerModels = new Map<PlayerModelId, THREE.Group>();
   private jetExhaust: JetExhaustView;
   private wingtipVortices?: WingtipVortexView;
-  private activePlayerModelId: PlayerModelId = "plane-1";
   private readonly hasAtmosphere: boolean;
   private readonly enemyViews = new Map<EnemyId, EnemyInstanceView>();
   private readonly enemyDestructions: EnemyDestructionView;
@@ -172,15 +167,13 @@ export class GameView {
 
     this.world.attach(this.scene, environment);
 
-    for (const modelId of PLAYER_MODEL_IDS)
-      if (assets) this.playerModels.set(modelId, assets.createPlayer(modelId));
-    if (!assets) this.playerModels.set("plane-1", createPlaceholderShip());
-    const initialPlayer = this.playerModels.get(this.activePlayerModelId);
-    if (!initialPlayer)
-      throw new Error("The default player model is unavailable.");
-    this.overshieldShell = createOvershieldShell(initialPlayer);
-    this.ship.add(initialPlayer, this.overshieldShell.group);
-    this.jetExhaust = new JetExhaustView(initialPlayer);
+    this.playerModel = assets?.createPlayer() ?? createPlaceholderShip();
+    this.overshieldShell = createOvershieldShell(this.playerModel);
+    this.ship.add(this.playerModel, this.overshieldShell.group);
+    this.jetExhaust = new JetExhaustView(this.playerModel);
+    this.wingtipVortices = this.hasAtmosphere
+      ? new WingtipVortexView(this.scene, this.playerModel)
+      : undefined;
     this.scene.add(this.ship);
     const destructionSources = new Map<
       EnemyId,
@@ -233,8 +226,6 @@ export class GameView {
       destructionSources,
     );
     for (const source of destructionSources.values()) source.material.dispose();
-    if (this.hasAtmosphere)
-      this.wingtipVortices = new WingtipVortexView(this.scene, initialPlayer);
 
     this.flightWindowGuide = addFlightWindow(this.scene);
     this.flightWindowGuide.visible = false;
@@ -432,24 +423,6 @@ export class GameView {
       performance.now() * 0.001 + OVERSHIELD_HIT_FLASH_DURATION;
   }
 
-  setPlayerModel(modelId: PlayerModelId) {
-    if (modelId === this.activePlayerModelId) return;
-    const model = this.playerModels.get(modelId);
-    if (!model) return;
-
-    this.jetExhaust.dispose();
-    this.wingtipVortices?.dispose();
-    this.ship.clear();
-    disposeObject(this.overshieldShell.group);
-    this.overshieldShell = createOvershieldShell(model);
-    this.ship.add(model, this.overshieldShell.group);
-    this.jetExhaust = new JetExhaustView(model);
-    this.wingtipVortices = this.hasAtmosphere
-      ? new WingtipVortexView(this.scene, model)
-      : undefined;
-    this.activePlayerModelId = modelId;
-  }
-
   getRenderResolution() {
     return {
       width: Math.round(
@@ -477,7 +450,7 @@ export class GameView {
     this.wingtipVortices?.dispose();
     this.enemyDestructions.dispose();
     disposeObject(this.overshieldShell.group);
-    for (const model of this.playerModels.values()) disposeObject(model);
+    disposeObject(this.playerModel);
     this.ship.removeFromParent();
     for (const group of this.projectileViews.values())
       disposeObject(group, false);
