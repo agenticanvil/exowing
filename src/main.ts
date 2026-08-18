@@ -182,7 +182,7 @@ let activeUpgrades: UpgradeId[] = [];
 let pendingUpgradeCarry: CampaignCarry | null = null;
 let previewedUpgradeId: UpgradeId | null = null;
 let levelStats = createLevelStats();
-type RunMode = "standard" | "transition-tour";
+type RunMode = "standard" | "boss" | "transition-tour";
 let runMode: RunMode = "standard";
 let activeEnemyPlan: LevelEnemyPlan = LEVELS[1].enemies;
 const lifecycle = new GameLifecycle();
@@ -327,17 +327,17 @@ async function startGame(levelNumber = 1, carry?: CampaignCarry) {
     currentLevelNumber = levelNumber;
     const level = LEVELS[levelId];
     activeUpgrades = [...(carry?.upgrades ?? [])];
-    activeEnemyPlan =
-      runMode === "transition-tour"
-        ? createTransitionTourPlan(level.enemies)
-        : level.enemies;
+    const quickBossEncounter = runMode !== "standard";
+    activeEnemyPlan = quickBossEncounter
+      ? createTransitionTourPlan(level.enemies)
+      : level.enemies;
     const world = createWorld(level.systems);
     view.dispose();
     simulation = new FlightSimulation({
       ...carry,
       level: currentLevelNumber,
       enemyPlan: activeEnemyPlan,
-      oneShotEnemies: runMode === "transition-tour",
+      oneShotEnemies: quickBossEncounter,
       world,
       events: flightEvents,
       upgrades: activeUpgrades,
@@ -590,7 +590,7 @@ function updateFrame(now: number) {
   performanceRecorder.span("simulation.step", () => {
     while (lifecycle.mode === "playing" && accumulator >= fixedDt) {
       simulation.invulnerable =
-        runMode === "transition-tour" || devSettings.invulnerable;
+        runMode !== "standard" || devSettings.invulnerable;
       const overshieldBeforeStep = simulation.player.overshield;
       const protectionBeforeStep =
         simulation.player.shield + simulation.player.overshield;
@@ -1050,6 +1050,9 @@ function setupDevControls() {
   const transitionTourButton = requiredElement<HTMLButtonElement>(
     "#start-transition-tour",
   );
+  const bossEncounterButton = requiredElement<HTMLButtonElement>(
+    "#start-boss-encounter",
+  );
   const openLevelSwitcherButton = requiredElement<HTMLButtonElement>(
     "#open-level-switcher",
   );
@@ -1108,6 +1111,9 @@ function setupDevControls() {
     openMenu(mainMenu, startMenuButton),
   );
   devMenuBack.addEventListener("click", () => closeDevOverlay?.());
+  bossEncounterButton.addEventListener("click", () =>
+    startRun(styleForLevel(currentLevelNumber), "boss"),
+  );
   transitionTourButton.addEventListener("click", () =>
     startRun(1, "transition-tour"),
   );
@@ -1184,6 +1190,9 @@ function setupDevControls() {
     transitionTour() {
       startRun(1, "transition-tour");
     },
+    boss(levelId = styleForLevel(currentLevelNumber)) {
+      startRun(levelId, "boss");
+    },
     spawnPickup(pickupId) {
       spawnDevPickup(pickupId);
     },
@@ -1211,6 +1220,7 @@ declare global {
       set: (name: DevSettingName, enabled?: boolean) => void;
       start: (levelId?: LevelId, overrides?: Partial<DevSettings>) => void;
       transitionTour: () => void;
+      boss: (levelId?: LevelId) => void;
       spawnPickup: (pickupId: PickupId) => void;
     };
   }

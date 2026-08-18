@@ -1376,6 +1376,7 @@ canvas {
   border-color: rgb(255 102 120 / 42%) !important;
 }
 
+.dev-boss-button,
 .dev-tour-button {
   margin-bottom: 7px;
   border-color: rgb(126 255 241 / 38%) !important;

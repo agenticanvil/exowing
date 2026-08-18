@@ -69,7 +69,7 @@ export function mountAppShell(app: HTMLElement, dev = import.meta.env.DEV) {
         dev
           ? `<div class="menu" id="dev-menu" data-menu-depth="1" hidden>
         ${menuRail("DEV MENU", "dev-menu-back", "Back to previous menu")}
-        <div class="menu__panel"><header class="menu__header"><h1>DEV MENU</h1></header><div class="menu__actions">${menuAction("start-transition-tour", "TRANSITION TOUR", "ONE ENCOUNTER PER LEVEL", "dev-tour-button")}${menuAction("open-dev-settings", "DEV SETTINGS")}${menuAction("open-level-switcher", "SWITCH LEVEL")}${menuAction("open-pickup-spawner", "SPAWN PICKUPS")}${menuAction("open-asset-scaling", "ASSET SCALING")}</div></div>
+        <div class="menu__panel"><header class="menu__header"><h1>DEV MENU</h1></header><div class="menu__actions">${menuAction("start-boss-encounter", "JUMP TO BOSS", "CURRENT LEVEL · ONE HIT", "dev-boss-button")}${menuAction("start-transition-tour", "TRANSITION TOUR", "ONE ENCOUNTER PER LEVEL", "dev-tour-button")}${menuAction("open-dev-settings", "DEV SETTINGS")}${menuAction("open-level-switcher", "SWITCH LEVEL")}${menuAction("open-pickup-spawner", "SPAWN PICKUPS")}${menuAction("open-asset-scaling", "ASSET SCALING")}</div></div>
       </div>
 
       <div class="menu" id="dev-settings-menu" data-menu-depth="2" hidden>

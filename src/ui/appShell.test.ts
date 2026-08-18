@@ -54,6 +54,8 @@ describe("mountAppShell", () => {
     expect(app.innerHTML).toContain('id="dev-pickup-menu"');
     expect(app.innerHTML).toContain('data-dev-pickup="shield"');
     expect(app.innerHTML).toContain('data-dev-pickup="chain-lightning"');
+    expect(app.innerHTML).toContain('id="start-boss-encounter"');
+    expect(app.innerHTML).toContain("CURRENT LEVEL · ONE HIT");
     expect(app.innerHTML).toContain('id="start-transition-tour"');
     expect(app.innerHTML).toContain("ONE ENCOUNTER PER LEVEL");
   });
